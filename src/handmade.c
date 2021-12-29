@@ -106,6 +106,8 @@ typedef struct ProgramState {
     MemoryArena permanentArena;
 
     uint32 shader;
+    uint32 vao;
+    uint32 vbo;
 } ProgramState;
 
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
@@ -116,6 +118,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     if (!gl.isInitialized) {
         gl = memory->gl;
         gl.Enable(GL_DEBUG_OUTPUT);
+        gl.DebugMessageCallback(openglDebugCallback, NULL);
     }
 
     ProgramState* state = memory->permanentStorage;
@@ -126,6 +129,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         initializeMemoryArena(&state->permanentArena,
                               memory->permanentStorageSize - sizeof(ProgramState),
                               (uint8*)memory->transientStorage + sizeof(ProgramState));
+        
         const char* vertexShaderSource =
             "in vec2 position;\n"
             "\n"
@@ -147,41 +151,41 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
                                                        fragmentShaderSource);
 
         ASSERT(state->shader);
+
+        gl.GenBuffers(1, &state->vbo);
+        gl.GenVertexArrays(1, &state->vao);
+
+        float vertexData[] = {
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            0.0f, 1.0f,
+        };
+
+        gl.BindBuffer(GL_ARRAY_BUFFER, state->vbo);
+        gl.BindVertexArray(state->vao); 
+        gl.EnableVertexAttribArray(0);
+        gl.VertexAttribPointer(0,
+                               2,
+                               GL_FLOAT,
+                               GL_FALSE,
+                               0,
+                               0);
+    
+        gl.BufferData(GL_ARRAY_BUFFER, sizeof(vertexData), vertexData, GL_STATIC_DRAW);
+
+        gl.BindBuffer(GL_ARRAY_BUFFER, 0);
+        gl.BindVertexArray(0); 
+        
         state->isInitialized = true;
     }
     
-    gl.DebugMessageCallback(openglDebugCallback, NULL);
-
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
-
-    uint32 vbo;
-    gl.GenBuffers(1, &vbo);
-
-    uint32 vao;
-    gl.GenVertexArrays(1, &vao);
-
-    float vertexData[] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 1.0f,
-    };
-
-    gl.BindBuffer(GL_ARRAY_BUFFER, vbo);
-    gl.BindVertexArray(vao); 
-    gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(0,
-                           2,
-                           GL_FLOAT,
-                           GL_FALSE,
-                           0,
-                           0);
     
-    gl.BufferData(GL_ARRAY_BUFFER, sizeof(vertexData), vertexData, GL_STATIC_DRAW);
-
+    gl.BindBuffer(GL_ARRAY_BUFFER, state->vbo);
+    gl.BindVertexArray(state->vao); 
     gl.UseProgram(state->shader);
-
     gl.DrawArrays(GL_TRIANGLE_FAN, 0, 4);
     
     return false;
