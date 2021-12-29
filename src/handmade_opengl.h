@@ -48,6 +48,7 @@
     X(Scissor, void, GLint, GLint, GLsizei, GLsizei)                    \
     X(ShaderSource, void, GLuint, GLsizei, const GLchar**, const GLint*)\
     X(TexImage2D, void, GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) \
+    X(TexSubImage2D, void, GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void*) \
     X(TexParameteri, void, GLenum, GLenum, GLint)                       \
     X(Uniform1f, void, GLint, GLfloat)                                  \
     X(Uniform1fv, void, GLint, GLsizei, const GLfloat*)                 \
