@@ -184,3 +184,6 @@ bool32 isKeyDown(InputInfo* input, KeyIndex key);
 typedef UPDATE_PROGRAM_AND_RENDER(UpdateProgramAndRenderFunction);
 
 UPDATE_PROGRAM_AND_RENDER(update_program_and_render);
+
+extern PlatformFunctions platform;
+extern OpenGLFunctions gl;
