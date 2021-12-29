@@ -11,3 +11,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   X11
   GL
   dl)
+
+add_library(handmade SHARED)
+
+target_sources(handmade PRIVATE
+  src/handmade.c
+  )

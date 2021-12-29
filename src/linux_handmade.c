@@ -363,8 +363,11 @@ internal void resetProgramMemory_(ProgramMemory* memory) {
 
 FOR_ALL_NEEDED_GLX_FUNCTIONS(DO_GL_FUNCTION_TYPEDEF)
 
-// aim for 60 FPS
-#define MANUAL_SYNC_FRAME_DURATION 16666
+/* // aim for 60 FPS */
+/* #define MANUAL_SYNC_FRAME_DURATION 16666 */
+
+// rely on V-sync
+#define MANUAL_SYNC_FRAME_DURATION 0
 
 // TODO(octave) : use sigaction instead
 void signalHandler(int signum) {
@@ -443,7 +446,6 @@ int main(int argc, char** argv) {
             GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
             GLX_BUFFER_SIZE, 32,
             GLX_DOUBLEBUFFER, true,
-            GLX_SAMPLES, 16,
             None,
         };
 
