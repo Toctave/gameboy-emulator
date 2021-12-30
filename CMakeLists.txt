@@ -17,4 +17,6 @@ add_library(handmade SHARED)
 target_sources(handmade PRIVATE
   src/handmade.c
   src/handmade_memory.c
+  src/gameboy.c
+  src/instructions.c
   )

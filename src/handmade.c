@@ -1,5 +1,6 @@
 #include "handmade.h"
 #include "handmade_memory.h"
+#include "gameboy.h"
 
 #include <stdio.h>
 
@@ -108,8 +109,9 @@ typedef struct ProgramState {
     uint32 shader;
     uint32 vao;
     uint32 vbo;
-
     uint32 texture;
+
+    GameBoy gb;
 } ProgramState;
 
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
@@ -124,8 +126,6 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 
     ProgramState* state = memory->permanentStorage;
-    uint32 width = 4;
-    uint32 height = 2;
 
     if (!state->isInitialized) {
         // Memory arenas
@@ -143,7 +143,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
             "\n"
             "void main() {\n"
             "    gl_Position = vec4(2 * position - 1, 0, 1);\n"
-            "    vertexUV = position;\n"
+            "    vertexUV = vec2(position.x, 1 - position.y);\n"
             "}\n";
 
         const char* fragmentShaderSource =
@@ -197,8 +197,8 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         gl.TexImage2D(GL_TEXTURE_2D,
                       0,
                       GL_RGBA,
-                      width,
-                      height,
+                      GAMEBOY_SCREEN_WIDTH,
+                      GAMEBOY_SCREEN_HEIGHT,
                       0,
                       GL_RED,
                       GL_UNSIGNED_BYTE,
@@ -236,27 +236,20 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
     
-    static uint8 i = 0;
-    i += 4;
-
-    uint8 textureData[] = {
-        i, 255 - i, i, 255 - i,
-        255 - i, i, 255 - i, i
-    };
-
     ASSERT(ARRAY_COUNT(textureData) == width * height);
 
     gl.BindTexture(GL_TEXTURE_2D, state->texture);
     gl.BindBuffer(GL_ARRAY_BUFFER, state->vbo);
     gl.BindVertexArray(state->vao); 
     gl.UseProgram(state->shader);
-    
+
+    state->gb.screen[40][65] += 16;
     gl.TexSubImage2D(GL_TEXTURE_2D,
                      0,
                      0, 0,
-                     width, height,
+                     GAMEBOY_SCREEN_WIDTH, GAMEBOY_SCREEN_HEIGHT,
                      GL_RED, GL_UNSIGNED_BYTE,
-                     textureData);
+                     state->gb.screen);
 
     gl.DrawArrays(GL_TRIANGLE_FAN, 0, 4);
     
