@@ -914,3 +914,16 @@ static InstructionHandler instructionHandlers[256] = {
     {2, 8, xorImm8},
     {1, 16, reset},
 };
+
+void executeInstruction(GameBoy* gb) {
+    uint8* instr = &gb->memory[REG(PC)];
+    InstructionHandler* handler = &instructionHandlers[instr[0]];
+
+    if (!handler->execute) {
+        fprintf(stderr, "Invalid opcode %x\n", instr[0]);
+        exit(1);
+    }
+
+    REG(PC) += handler->length;
+    handler->execute(gb, instr);
+}

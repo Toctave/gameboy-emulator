@@ -31,3 +31,4 @@ enum Register8 {
     REG_A = 7,
 };
 
+void executeInstruction(GameBoy* gb);
