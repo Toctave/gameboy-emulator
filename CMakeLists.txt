@@ -19,4 +19,5 @@ target_sources(handmade PRIVATE
   src/handmade_memory.c
   src/instructions.c
   src/gameboy.c
+  src/rendering.c
   )

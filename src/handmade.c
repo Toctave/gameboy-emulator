@@ -117,14 +117,7 @@ typedef struct ProgramState {
 void test(ProgramState* state) {
     GameBoy* gb = &state->gb;
 
-    if (!loadRom(gb, "/home/toc/dev/gameboy-emulator/roms/tetris.gb")) {
-        fprintf(stderr, "Failed to load ROM\n");
-        return;
-    }
-
     while (true) {
-        printGameboyState(gb);
-        executeInstruction(gb);
     }
 }
 
@@ -140,9 +133,13 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 
     ProgramState* state = memory->permanentStorage;
+    GameBoy* gb = &state->gb;
 
     if (!state->isInitialized) {
-        test(state);
+        if (!loadRom(gb, "/home/toc/dev/gameboy-emulator/roms/tetris.gb")) {
+            fprintf(stderr, "Failed to load ROM\n");
+            return true;
+        }
         
         // Memory arenas
         initializeMemoryArena(&state->transientArena,
@@ -248,7 +245,14 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         }
     }
 #endif
-    
+
+    for (int i = 0; i < 10000; i++) {
+        /* printGameboyState(gb); */
+        executeInstruction(gb);
+    }
+
+    drawBackground(gb);
+        
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
     
@@ -259,7 +263,6 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     gl.BindVertexArray(state->vao); 
     gl.UseProgram(state->shader);
 
-    state->gb.screen[40][65] += 16;
     gl.TexSubImage2D(GL_TEXTURE_2D,
                      0,
                      0, 0,

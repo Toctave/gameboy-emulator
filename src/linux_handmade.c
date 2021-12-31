@@ -407,7 +407,7 @@ int main(int argc, char** argv) {
     LinuxContext ctx = {};
 
     uint32 initialWindowWidth = 640;
-    uint32 initialWindowHeight = 480;
+    uint32 initialWindowHeight = 288 * 2;
     uint32 bytes_per_pixel = 4;
 
     ctx.dpy = XOpenDisplay(NULL);

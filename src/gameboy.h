@@ -34,17 +34,18 @@ enum Register8 {
     REG_A = 7,
 };
 
-enum MMappedRegister {
-    SCY = 0xFF42,
-    SCX = 0xFF43,
-    LY  = 0xFF44,
-    LYC = 0xFF45,
-    BGP = 0xFF47,
-    OBP0 = 0xFF48,
-    OBP1 = 0xFF49,
-    WY  = 0xFF4A,
-    WX  = 0xFF4B,
-    IME = 0xFFFF,
+enum MemoryMappedRegister {
+    MMR_LCDC = 0xFF40,
+    MMR_SCY = 0xFF42,
+    MMR_SCX = 0xFF43,
+    MMR_LY  = 0xFF44,
+    MMR_LYC = 0xFF45,
+    MMR_BGP = 0xFF47,
+    MMR_OBP0 = 0xFF48,
+    MMR_OBP1 = 0xFF49,
+    MMR_WY  = 0xFF4A,
+    MMR_WX  = 0xFF4B,
+    MMR_IME = 0xFFFF,
 };
 
 enum CPUFlag {
@@ -53,6 +54,17 @@ enum CPUFlag {
     FLAG_N = 6,
     FLAG_Z = 7,
 };
+
+enum SpecialAddress {
+    TILE_DATA_BLOCK0 = 0x8000,
+    TILE_DATA_BLOCK1 = 0x8800,
+    TILE_DATA_BLOCK2 = 0x9000,
+
+    TILEMAP0 = 0x9800,
+    TILEMAP1 = 0x9C00,
+};
+
+uint8 getBit(uint8 byte, uint8 index);
 
 uint8 getHighByte(GameBoy* gb, enum Register16 reg);
 uint8 getLowByte(GameBoy* gb, enum Register16 reg);
@@ -69,3 +81,6 @@ void executeInstruction(GameBoy* gb);
 void printGameboyState(GameBoy* gb);
 
 bool32 loadRom(GameBoy* gb, const char* filename);
+void drawBackground(GameBoy* gb);
+
+void gbError(GameBoy* gb, const char* message, ...);

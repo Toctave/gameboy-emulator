@@ -3,6 +3,31 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
+
+void vGBError(GameBoy* gb, const char* message, va_list args) {
+    fprintf(stderr, "Error : ");
+    vfprintf(stderr, message, args);
+    fprintf(stderr, "\n");
+
+    fprintf(stderr, "Gameboy state :\n\n");
+    printGameboyState(gb);
+
+    exit(1);
+}
+
+void gbError(GameBoy* gb, const char* message, ...) {
+    va_list args;
+    va_start(args, message);
+
+    vGBError(gb, message, args);
+
+    va_end(args);
+}
+
+uint8 getBit(uint8 byte, uint8 index) {
+    return (byte >> index) & 1;
+}
 
 uint8 getHighByte(GameBoy* gb, enum Register16 reg) {
     return gb->registers[reg] >> 8;
@@ -25,7 +50,7 @@ void setLowByte(GameBoy* gb, enum Register16 reg, uint8 value) {
 bool32 getFlag(GameBoy* gb, enum CPUFlag flag) {
     uint8 flags = getLowByte(gb, REG_AF);
 
-    return (flags >> flag) & 1;
+    return getBit(flags, flag);
 }
 
 void setFlag(GameBoy* gb, enum CPUFlag flag, bool32 value) {
@@ -55,8 +80,7 @@ uint8 getReg8(GameBoy* gb, uint8 index) {
     case REG_A:
         return getHighByte(gb, REG_AF);
     default:
-        fprintf(stderr, "Unknown 8-bit register index %u\n", index);
-        exit(1);
+        gbError(gb, "Unknown 8-bit register index %u", index);
         break;
     }
 }
@@ -85,8 +109,7 @@ void setReg8(GameBoy* gb, uint8 index, uint8 value) {
         setHighByte(gb, REG_AF, value);
         break;
     default:
-        fprintf(stderr, "Unknown 8-bit register index %u\n", index);
-        exit(1);
+        gbError(gb, "Unknown 8-bit register index %u", index);
         break;
     }
 }
@@ -137,13 +160,13 @@ bool32 loadRom(GameBoy* gb, const char* filename) {
     uint64 fsize = platform.getFileSize(filename, &success);
     
     if (!success) {
-        fprintf(stderr, "Failed to open file %s\n", filename);
+        gbError(gb, "Failed to open file %s", filename);
         return false;
     }
 
     if (fsize != 0x8000) {
-        fprintf(stderr, "File %s has wrong file size 0x%lX (expected 0x8000)\n",
-                filename, fsize);
+        gbError(gb, "File %s has wrong file size 0x%lX (expected 0x8000)",
+              filename, fsize);
     }
 
     success = platform.readFileIntoMemory(filename, gb->memory, 0x8000);

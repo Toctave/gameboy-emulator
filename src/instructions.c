@@ -7,7 +7,7 @@
     void name(GameBoy* gb, uint8* instr)
 #define INSTRUCTION_EXECUTE_FN(name) static INSTRUCTION_EXECUTE_FN_NOSTATIC(name)
 
-#define NOT_IMPLEMENTED() { fprintf(stderr, "Function '%s' not implemented.\n", __FUNCTION__); }
+#define NOT_IMPLEMENTED() { gbError(gb, "Function '%s' not implemented.", __FUNCTION__); }
 
 typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 
@@ -42,6 +42,7 @@ typedef struct InstructionHandler {
     uint16 length;
     uint16 cycles;
     InstructionExecuteFn* execute;
+    const char* name;
 } InstructionHandler;
 
 INSTRUCTION_EXECUTE_FN(loadRegToReg) {
@@ -136,7 +137,7 @@ INSTRUCTION_EXECUTE_FN(loadImm16ToReg) {
 }
 
 INSTRUCTION_EXECUTE_FN(loadSPToAddr16) {
-    MEM(get16BitArgument(instr)) = REG(SP);
+    write16Bits(&MEM(get16BitArgument(instr)), REG(SP));
 }
 
 INSTRUCTION_EXECUTE_FN(loadSPToHL) {
@@ -147,13 +148,13 @@ INSTRUCTION_EXECUTE_FN(push) {
     enum Register16 src = BC_DE_HL_AF[(instr[0] - 0xC5) >> 4];
     
     REG(SP) = REG(SP) - 2;
-    MEM(REG(SP)) = gb->registers[src];
+    write16Bits(&MEM(REG(SP)), gb->registers[src]);
 }
 
 INSTRUCTION_EXECUTE_FN(pop) {
-    enum Register16 src = BC_DE_HL_AF[(instr[0] - 0xC2) >> 4];
+    enum Register16 dst = BC_DE_HL_AF[(instr[0] - 0xC1) >> 4];
 
-    gb->registers[src] = MEM(REG(SP));
+    gb->registers[dst] = read16Bits(&MEM(REG(SP)));
     REG(SP) = REG(SP) + 2;
 }
 
@@ -313,14 +314,19 @@ INSTRUCTION_EXECUTE_FN(compareReg) {
     NOT_IMPLEMENTED();
 }
 
+void compareWithValue(GameBoy* gb, uint8 value) {
+    setFlag(gb, FLAG_Z, getReg8(gb, REG_A) == value);
+    setFlag(gb, FLAG_N, 1);
+    // TODO(octave) : set H flag
+    setFlag(gb, FLAG_Z, getReg8(gb, REG_A) < value);
+}
+
 INSTRUCTION_EXECUTE_FN(compareImm8) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    compareWithValue(gb, instr[1]);
 }
 
 INSTRUCTION_EXECUTE_FN(compareAddrHL) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    compareWithValue(gb, MEM(REG(HL)));
 }
 
 
@@ -399,13 +405,17 @@ static uint8 rotateRight(uint8 value) {
 
 INSTRUCTION_EXECUTE_FN(rotateALeft) {
     uint8 a = getReg8(gb, REG_A);
-    setReg8(gb, REG_A, rotateLeft(a));
+    a = rotateLeft(a);
+    setReg8(gb, REG_A, a);
+    setFlag(gb, FLAG_C, a & 1);
 }
 
 INSTRUCTION_EXECUTE_FN(rotateALeftThroughCarry) {
     // TODO(octave)
     NOT_IMPLEMENTED();
 }
+
+// TODO(octave) : Flags for bit manip functions
 
 INSTRUCTION_EXECUTE_FN(rotateARight) {
     uint8 a = getReg8(gb, REG_A);
@@ -463,8 +473,22 @@ INSTRUCTION_EXECUTE_FN(shiftRegLeftArithmetic) {
     setReg8(gb, reg, getReg8(gb, reg) << 1);
 }
 
+uint8 shiftRightArithmetic(uint8 value) {
+    return (value >> 1) | (value & 0x80);
+}
+
+INSTRUCTION_EXECUTE_FN(shiftRegRightArithmetic) {
+    enum Register8 reg = instr[0] - 0x20;
+
+    setReg8(gb, reg, shiftRightArithmetic(getReg8(gb, reg)));
+}
+
 INSTRUCTION_EXECUTE_FN(shiftAddrHLLeftArithmetic) {
     MEM(REG(HL)) = MEM(REG(HL)) << 1;
+}
+
+INSTRUCTION_EXECUTE_FN(shiftAddrHLRightArithmetic) {
+    MEM(REG(HL)) = shiftRightArithmetic(MEM(REG(HL)));
 }
 
 uint8 swapNibbles(uint8 value) {
@@ -493,33 +517,51 @@ INSTRUCTION_EXECUTE_FN(shiftAddrHLRightLogical) {
 
 
 INSTRUCTION_EXECUTE_FN(testBitReg) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    enum Register8 reg = instr[0] % 8;
+
+    uint8 bitIndex = (instr[0] - 0x40) >> 3;
+    uint8 bitValue = getBit(getReg8(gb, reg), bitIndex);
+
+    setFlag(gb, FLAG_Z, bitValue);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 1);
 }
 
 INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    uint8 bitIndex = (instr[0] - 0x40) >> 3;
+    uint8 bitValue = getBit(MEM(REG(HL)), bitIndex);
+
+    setFlag(gb, FLAG_Z, bitValue);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 1);
 }
 
 INSTRUCTION_EXECUTE_FN(setBitReg) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    enum Register8 reg = instr[0] % 8;
+    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    uint8 regVal = getReg8(gb, reg);
+
+    setReg8(gb, reg, regVal | (1 << bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+
+    MEM(REG(HL)) = MEM(REG(HL)) | (1 << bitIndex);
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    enum Register8 reg = instr[0] % 8;
+    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    uint8 regVal = getReg8(gb, reg);
+
+    setReg8(gb, reg, regVal & ~(1 << bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+
+    MEM(REG(HL)) = MEM(REG(HL)) & ~(1 << bitIndex);
 }
 
 
@@ -548,20 +590,26 @@ INSTRUCTION_EXECUTE_FN(stop) {
 }
 
 INSTRUCTION_EXECUTE_FN(disableInterrupts) {
-    MEM(IME) = 0;
+    MEM(MMR_IME) = 0;
 }
 
 INSTRUCTION_EXECUTE_FN(enableInterrupts) {
-    MEM(IME) = 1;
+    MEM(MMR_IME) = 1;
 }
 
 
 INSTRUCTION_EXECUTE_FN(jumpImm16) {
+    uint16 prevPC = REG(PC);
     REG(PC) = get16BitArgument(instr);
+
+    /* printf("Jump 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(jumpHL) {
+    uint16 prevPC = REG(PC);
     REG(PC) = REG(HL);
+    
+    /* printf("Jump HL 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 enum Conditional {
@@ -597,7 +645,9 @@ INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
 
 INSTRUCTION_EXECUTE_FN(relativeJump) {
     // TODO(octave) : check and test this, possible off-by-one error ?
-    REG(PC) += getSigned8BitArgument(instr) - 1;
+    uint16 prevPC = REG(PC);
+    REG(PC) += getSigned8BitArgument(instr);
+    /* printf("Relative jump 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
@@ -609,9 +659,13 @@ INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
 }
 
 INSTRUCTION_EXECUTE_FN(callImm16) {
+    uint16 prevPC = REG(PC);
+    
     REG(SP) -= 2;
-    MEM(REG(SP)) = REG(PC);
+    write16Bits(&MEM(REG(SP)), REG(PC));
     REG(PC) = get16BitArgument(instr);
+
+    printf("Call 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
@@ -623,8 +677,12 @@ INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
 }
 
 INSTRUCTION_EXECUTE_FN(ret) {
-    REG(PC) = MEM(REG(SP));
+    uint16 prevPC = REG(PC);
+    
+    REG(PC) = read16Bits(&MEM(REG(SP)));
     REG(SP) += 2;
+
+    printf("Return 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRet) {
@@ -643,322 +701,373 @@ INSTRUCTION_EXECUTE_FN(retAndEnableInterrupts) {
 INSTRUCTION_EXECUTE_FN(reset) {
     uint16 address = instr[0] - 0xC7;
     REG(SP) -= 2;
-    MEM(REG(SP)) = REG(PC);
+    write16Bits(&MEM(REG(SP)), REG(PC));
+
+    uint16 prevPC = REG(PC);
     REG(PC) = address;
+    printf("Reset 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(prefixCB) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    instr++;
+
+    bool32 isAddrHL = (instr[0] % 8) == 6;
+
+    InstructionExecuteFn* dispatchTable[8];
+
+    if (isAddrHL) {
+        dispatchTable[0] = rotateAddrHLLeft;
+        dispatchTable[1] = rotateAddrHLRight;
+        dispatchTable[2] = rotateAddrHLLeftThroughCarry;
+        dispatchTable[3] = rotateAddrHLRightThroughCarry;
+        dispatchTable[4] = shiftAddrHLLeftArithmetic;
+        dispatchTable[5] = shiftAddrHLRightArithmetic;
+        dispatchTable[6] = swapNibblesAddrHL;
+        dispatchTable[7] = shiftAddrHLRightLogical;
+    } else {
+        dispatchTable[0] = rotateRegLeft;
+        dispatchTable[1] = rotateRegRight;
+        dispatchTable[2] = rotateRegLeftThroughCarry;
+        dispatchTable[3] = rotateRegRightThroughCarry;
+        dispatchTable[4] = shiftRegLeftArithmetic;
+        dispatchTable[5] = shiftRegRightArithmetic;
+        dispatchTable[6] = swapNibblesReg;
+        dispatchTable[7] = shiftRegRightLogical;
+    }
+    
+    if (instr[0] < 0x40) {
+        uint8 instrIndex = instr[0] >> 3;
+        dispatchTable[instrIndex](gb, instr);
+    } else if (instr[0] < 0x80) { // test bit
+        if (isAddrHL) {
+            testBitAddrHL(gb, instr);
+        } else {
+            testBitReg(gb, instr);
+        }
+    } else if (instr[0] < 0xC0) { // reset bit
+        if (isAddrHL) {
+            resetBitAddrHL(gb, instr);
+        } else {
+            resetBitReg(gb, instr);
+        }
+    } else { // set bit
+        if (isAddrHL) {
+            setBitAddrHL(gb, instr);
+        } else {
+            setBitReg(gb, instr);
+        }
+    }
 }
 
 #define VARIABLE_CYCLES 0xFFFF
 
+#define INSTR(length, cycles, handler) {length, cycles, handler, #handler}
+
 // reference : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html
 static InstructionHandler instructionHandlers[256] = {
     // 00
-    {1, 4, nop},
-    {3, 12, loadImm16ToReg},
-    {1, 8, loadAToAddrBC},
-    {1, 8, incReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, rotateALeft},
+    INSTR(1, 4, nop),
+    INSTR(3, 12, loadImm16ToReg),
+    INSTR(1, 8, loadAToAddrBC),
+    INSTR(1, 8, incReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, rotateALeft),
     
-    {3, 20, loadSPToAddr16},
-    {1, 8, addReg16ToHL},
-    {1, 8, loadAddrBCToA},
-    {1, 8, decReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, rotateARight},
+    INSTR(3, 20, loadSPToAddr16),
+    INSTR(1, 8, addReg16ToHL),
+    INSTR(1, 8, loadAddrBCToA),
+    INSTR(1, 8, decReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, rotateARight),
 
     // 10
-    {2, 4, stop},
-    {3, 12, loadImm16ToReg},
-    {1, 8, loadAToAddrDE},
-    {1, 8, incReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, rotateALeftThroughCarry},
+    INSTR(2, 4, stop),
+    INSTR(3, 12, loadImm16ToReg),
+    INSTR(1, 8, loadAToAddrDE),
+    INSTR(1, 8, incReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, rotateALeftThroughCarry),
     
-    {2, 12, relativeJump},
-    {1, 8, addReg16ToHL},
-    {1, 8, loadAddrDEToA},
-    {1, 8, decReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, rotateARightThroughCarry},
+    INSTR(2, 12, relativeJump),
+    INSTR(1, 8, addReg16ToHL),
+    INSTR(1, 8, loadAddrDEToA),
+    INSTR(1, 8, decReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, rotateARightThroughCarry),
 
     // 20
-    {2, VARIABLE_CYCLES, conditionalRelativeJump},
-    {3, 12, loadImm16ToReg},
-    {1, 8, loadAndIncrementAToAddrHL},
-    {1, 8, incReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, decimalAdjust},
+    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(3, 12, loadImm16ToReg),
+    INSTR(1, 8, loadAndIncrementAToAddrHL),
+    INSTR(1, 8, incReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, decimalAdjust),
     
-    {2, VARIABLE_CYCLES, conditionalRelativeJump},
-    {1, 8, addReg16ToHL},
-    {1, 8, loadAndIncrementAddrHLToA},
-    {1, 8, decReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, complement},
+    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(1, 8, addReg16ToHL),
+    INSTR(1, 8, loadAndIncrementAddrHLToA),
+    INSTR(1, 8, decReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, complement),
 
     // 30
-    {2, VARIABLE_CYCLES, conditionalRelativeJump},
-    {3, 12, loadImm16ToReg},
-    {1, 8, loadAndDecrementAToAddrHL},
-    {1, 8, incReg16},
-    {1, 12, incAddrHL},
-    {1, 12, decAddrHL},
-    {2, 12, loadImm8ToAddrHL},
-    {1, 4, setCarry},
+    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(3, 12, loadImm16ToReg),
+    INSTR(1, 8, loadAndDecrementAToAddrHL),
+    INSTR(1, 8, incReg16),
+    INSTR(1, 12, incAddrHL),
+    INSTR(1, 12, decAddrHL),
+    INSTR(2, 12, loadImm8ToAddrHL),
+    INSTR(1, 4, setCarry),
     
-    {2, VARIABLE_CYCLES, conditionalRelativeJump},
-    {1, 8, addReg16ToHL},
-    {1, 8, loadAndDecrementAddrHLToA},
-    {1, 8, decReg16},
-    {1, 4, incReg},
-    {1, 4, decReg},
-    {2, 8, loadImm8ToReg},
-    {1, 4, flipCarry},
+    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(1, 8, addReg16ToHL),
+    INSTR(1, 8, loadAndDecrementAddrHLToA),
+    INSTR(1, 8, decReg16),
+    INSTR(1, 4, incReg),
+    INSTR(1, 4, decReg),
+    INSTR(2, 8, loadImm8ToReg),
+    INSTR(1, 4, flipCarry),
 
     // 40
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
     // 50
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
     // 60
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
     // 70
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, halt},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, halt),
+    INSTR(1, 4, loadRegToReg),
 
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 4, loadRegToReg},
-    {1, 8, loadAddrHLToReg},
-    {1, 4, loadRegToReg},
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 8, loadAddrHLToReg),
+    INSTR(1, 4, loadRegToReg),
 
     // 80
-    {1, 4, addReg},
-    {1, 4, addReg},
-    {1, 4, addReg},
-    {1, 4, addReg},
-    {1, 4, addReg},
-    {1, 4, addReg},
-    {1, 8, addAddrHL},
-    {1, 4, addReg},
+    INSTR(1, 4, addReg),
+    INSTR(1, 4, addReg),
+    INSTR(1, 4, addReg),
+    INSTR(1, 4, addReg),
+    INSTR(1, 4, addReg),
+    INSTR(1, 4, addReg),
+    INSTR(1, 8, addAddrHL),
+    INSTR(1, 4, addReg),
 
-    {1, 4, adcReg},
-    {1, 4, adcReg},
-    {1, 4, adcReg},
-    {1, 4, adcReg},
-    {1, 4, adcReg},
-    {1, 4, adcReg},
-    {1, 8, adcAddrHL},
-    {1, 4, adcReg},
+    INSTR(1, 4, adcReg),
+    INSTR(1, 4, adcReg),
+    INSTR(1, 4, adcReg),
+    INSTR(1, 4, adcReg),
+    INSTR(1, 4, adcReg),
+    INSTR(1, 4, adcReg),
+    INSTR(1, 8, adcAddrHL),
+    INSTR(1, 4, adcReg),
 
     // 90
-    {1, 4, subReg},
-    {1, 4, subReg},
-    {1, 4, subReg},
-    {1, 4, subReg},
-    {1, 4, subReg},
-    {1, 4, subReg},
-    {1, 8, subAddrHL},
-    {1, 4, subReg},
+    INSTR(1, 4, subReg),
+    INSTR(1, 4, subReg),
+    INSTR(1, 4, subReg),
+    INSTR(1, 4, subReg),
+    INSTR(1, 4, subReg),
+    INSTR(1, 4, subReg),
+    INSTR(1, 8, subAddrHL),
+    INSTR(1, 4, subReg),
 
-    {1, 4, sbcReg},
-    {1, 4, sbcReg},
-    {1, 4, sbcReg},
-    {1, 4, sbcReg},
-    {1, 4, sbcReg},
-    {1, 4, sbcReg},
-    {1, 8, sbcAddrHL},
-    {1, 4, sbcReg},
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 4, sbcReg),
+    INSTR(1, 8, sbcAddrHL),
+    INSTR(1, 4, sbcReg),
 
     // A0
-    {1, 4, andReg},
-    {1, 4, andReg},
-    {1, 4, andReg},
-    {1, 4, andReg},
-    {1, 4, andReg},
-    {1, 4, andReg},
-    {1, 8, andAddrHL},
-    {1, 4, andReg},
+    INSTR(1, 4, andReg),
+    INSTR(1, 4, andReg),
+    INSTR(1, 4, andReg),
+    INSTR(1, 4, andReg),
+    INSTR(1, 4, andReg),
+    INSTR(1, 4, andReg),
+    INSTR(1, 8, andAddrHL),
+    INSTR(1, 4, andReg),
 
-    {1, 4, xorReg},
-    {1, 4, xorReg},
-    {1, 4, xorReg},
-    {1, 4, xorReg},
-    {1, 4, xorReg},
-    {1, 4, xorReg},
-    {1, 8, xorAddrHL},
-    {1, 4, xorReg},
+    INSTR(1, 4, xorReg),
+    INSTR(1, 4, xorReg),
+    INSTR(1, 4, xorReg),
+    INSTR(1, 4, xorReg),
+    INSTR(1, 4, xorReg),
+    INSTR(1, 4, xorReg),
+    INSTR(1, 8, xorAddrHL),
+    INSTR(1, 4, xorReg),
 
     // B0
-    {1, 4, orReg},
-    {1, 4, orReg},
-    {1, 4, orReg},
-    {1, 4, orReg},
-    {1, 4, orReg},
-    {1, 4, orReg},
-    {1, 8, orAddrHL},
-    {1, 4, orReg},
+    INSTR(1, 4, orReg),
+    INSTR(1, 4, orReg),
+    INSTR(1, 4, orReg),
+    INSTR(1, 4, orReg),
+    INSTR(1, 4, orReg),
+    INSTR(1, 4, orReg),
+    INSTR(1, 8, orAddrHL),
+    INSTR(1, 4, orReg),
 
-    {1, 4, compareReg},
-    {1, 4, compareReg},
-    {1, 4, compareReg},
-    {1, 4, compareReg},
-    {1, 4, compareReg},
-    {1, 4, compareReg},
-    {1, 8, compareAddrHL},
-    {1, 4, compareReg},
+    INSTR(1, 4, compareReg),
+    INSTR(1, 4, compareReg),
+    INSTR(1, 4, compareReg),
+    INSTR(1, 4, compareReg),
+    INSTR(1, 4, compareReg),
+    INSTR(1, 4, compareReg),
+    INSTR(1, 8, compareAddrHL),
+    INSTR(1, 4, compareReg),
 
     // C0
-    {1, VARIABLE_CYCLES, conditionalRet},
-    {1, 12, pop},
-    {3, VARIABLE_CYCLES, conditionalJumpImm16},
-    {3, 16, jumpImm16},
-    {3, VARIABLE_CYCLES, conditionalCallImm16},
-    {1, 16, push},
-    {2, 8, addImm8},
-    {1, 16, reset},
+    INSTR(1, VARIABLE_CYCLES, conditionalRet),
+    INSTR(1, 12, pop),
+    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(3, 16, jumpImm16),
+    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(1, 16, push),
+    INSTR(2, 8, addImm8),
+    INSTR(1, 16, reset),
     
-    {1, VARIABLE_CYCLES, conditionalRet},
-    {1, 16, ret},
-    {3, VARIABLE_CYCLES, conditionalJumpImm16},
-    {1, 4, prefixCB},
-    {3, VARIABLE_CYCLES, conditionalCallImm16},
-    {3, 24, callImm16},
-    {2, 8, adcImm8},
-    {1, 16, reset},
+    INSTR(1, VARIABLE_CYCLES, conditionalRet),
+    INSTR(1, 16, ret),
+    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(2, 4, prefixCB),
+    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(3, 24, callImm16),
+    INSTR(2, 8, adcImm8),
+    INSTR(1, 16, reset),
 
     // D0
-    {1, VARIABLE_CYCLES, conditionalRet},
-    {1, 12, pop},
-    {3, VARIABLE_CYCLES, conditionalJumpImm16},
+    INSTR(1, VARIABLE_CYCLES, conditionalRet),
+    INSTR(1, 12, pop),
+    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
     {},
-    {3, VARIABLE_CYCLES, conditionalCallImm16},
-    {1, 16, push},
-    {2, 8, subImm8},
-    {1, 16, reset},
+    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(1, 16, push),
+    INSTR(2, 8, subImm8),
+    INSTR(1, 16, reset),
     
-    {1, VARIABLE_CYCLES, conditionalRet},
-    {1, 16, retAndEnableInterrupts},
-    {3, VARIABLE_CYCLES, conditionalJumpImm16},
+    INSTR(1, VARIABLE_CYCLES, conditionalRet),
+    INSTR(1, 16, retAndEnableInterrupts),
+    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
     {},
-    {3, VARIABLE_CYCLES, conditionalCallImm16},
+    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
     {},
-    {2, 8, sbcImm8},
-    {1, 16, reset},
+    INSTR(2, 8, sbcImm8),
+    INSTR(1, 16, reset),
 
     // E0
-    {2, 12, loadAToIOPortImm8},
-    {1, 12, pop},
-    {2, 8, loadAToIOPortC},
+    INSTR(2, 12, loadAToIOPortImm8),
+    INSTR(1, 12, pop),
+    INSTR(2, 8, loadAToIOPortC),
     {},
     {},
-    {1, 16, push},
-    {2, 8, andImm8},
-    {1, 16, reset},
+    INSTR(1, 16, push),
+    INSTR(2, 8, andImm8),
+    INSTR(1, 16, reset),
 
-    {2, 16, addSignedToSP},
-    {1, 4, jumpHL},
-    {3, 16, loadAToAddr16},
+    INSTR(2, 16, addSignedToSP),
+    INSTR(1, 4, jumpHL),
+    INSTR(3, 16, loadAToAddr16),
     {},
     {},
     {},
-    {2, 8, xorImm8},
-    {1, 16, reset},
+    INSTR(2, 8, xorImm8),
+    INSTR(1, 16, reset),
 
     // F0
-    {2, 12, loadIOPortImm8ToA},
-    {1, 12, pop},
-    {2, 8, loadIOPortCToA},
-    {1, 4, disableInterrupts},
+    INSTR(2, 12, loadIOPortImm8ToA),
+    INSTR(1, 12, pop),
+    INSTR(2, 8, loadIOPortCToA),
+    INSTR(1, 4, disableInterrupts),
     {},
-    {1, 16, push},
-    {2, 8, andImm8},
-    {1, 16, reset},
+    INSTR(1, 16, push),
+    INSTR(2, 8, andImm8),
+    INSTR(1, 16, reset),
 
-    {2, 16, addSignedToSP},
-    {1, 4, jumpHL},
-    {3, 16, loadAToAddr16},
+    INSTR(2, 16, addSignedToSP),
+    INSTR(1, 4, jumpHL),
+    INSTR(3, 16, loadAToAddr16),
+    INSTR(1, 4, enableInterrupts),
     {},
     {},
-    {},
-    {2, 8, xorImm8},
-    {1, 16, reset},
+    INSTR(2, 8, compareImm8),
+    INSTR(1, 16, reset),
 };
 
 void executeInstruction(GameBoy* gb) {
@@ -966,9 +1075,11 @@ void executeInstruction(GameBoy* gb) {
     InstructionHandler* handler = &instructionHandlers[instr[0]];
 
     if (!handler->execute) {
-        fprintf(stderr, "Invalid opcode %x\n", instr[0]);
+        fprintf(stderr, "Invalid opcode %x at 0x%04X\n", instr[0], REG(PC));
         exit(1);
     }
+
+    /* printf("Executing %s @0x%04X\n", handler->name, REG(PC)); */
 
     REG(PC) += handler->length;
 
