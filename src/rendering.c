@@ -5,7 +5,8 @@
 uint8 grayLevel(uint8 palette, uint8 id) {
     uint8 color = (palette >> (id * 2)) & 0x3;
 
-    return color * 64;
+    uint8 shades[4] = {0, 85, 170, 255};
+    return shades[color];
 }
 
 void assembleTileLine(GameBoy* gb, uint8 palette, uint8* source, uint8* destination) {
@@ -22,14 +23,14 @@ void assembleTileLine(GameBoy* gb, uint8 palette, uint8* source, uint8* destinat
 
 uint8* getBGWindowTile(GameBoy* gb, uint8 tileIndex) {
     uint8 lcdc = MEM(MMR_LCDC);
-    
+
     if (getBit(lcdc, 4)) {
-        return &MEM(TILE_DATA_BLOCK0 + tileIndex);
+        return &MEM(TILE_DATA_BLOCK0 + tileIndex * 16);
     } else {
         if (tileIndex < 128) {
-            return &MEM(TILE_DATA_BLOCK2 + tileIndex);
+            return &MEM(TILE_DATA_BLOCK2 + tileIndex * 16);
         } else {
-            return &MEM(TILE_DATA_BLOCK1 + tileIndex - 128);
+            return &MEM(TILE_DATA_BLOCK1 + (tileIndex - 128) * 16);
         }
     }
 }
