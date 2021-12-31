@@ -14,7 +14,6 @@ void assembleTileLine(GameBoy* gb, uint8 palette, uint8* source, uint8* destinat
         uint8 id_msb = (source[1] >> (7 - x)) & 1;
 
         uint8 id = (id_msb << 1) | id_lsb;
-
         uint8 gray = grayLevel(palette, id);
 
         *destination++ = gray;
@@ -43,9 +42,6 @@ void drawBackground(GameBoy* gb) {
 
     uint8* tileMap = getBit(lcdc, 3) ? &MEM(TILEMAP1) : &MEM(TILEMAP0);
 
-    palette = 0xe4;
-    /* printf("Palette = 0x%X\n", palette); */
-
     uint8* currentTilePtr = tileMap;
     for (uint8 tileY = 0; tileY < 32; tileY++) {
         for (uint8 tileX = 0; tileX < 32; tileX++) {
@@ -58,7 +54,7 @@ void drawBackground(GameBoy* gb) {
                 if (screenRow < GAMEBOY_SCREEN_HEIGHT
                     && tileX * 8 + 7 < GAMEBOY_SCREEN_WIDTH) {
                     uint8* dst = &gb->screen[screenRow][tileX * 8];
-                    assembleTileLine(gb, palette, tile, dst);
+                    assembleTileLine(gb, palette, tile + 2 * row, dst);
                 }
             }
         }
