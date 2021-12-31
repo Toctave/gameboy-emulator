@@ -3,48 +3,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define INSTRUCTION_EXECUTE_FN_NOSTATIC(name) void name(GameBoy* gb, uint8* instr)
+#define INSTRUCTION_EXECUTE_FN_NOSTATIC(name) \
+    void name(GameBoy* gb, uint8* instr)
 #define INSTRUCTION_EXECUTE_FN(name) static INSTRUCTION_EXECUTE_FN_NOSTATIC(name)
 
-#define REG(name) gb->registers[REG_##name]
-#define MEM(addr) gb->memory[addr]
+#define NOT_IMPLEMENTED() { fprintf(stderr, "Function '%s' not implemented.\n", __FUNCTION__); }
 
 typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 
 static enum Register16 BC_DE_HL_SP[4] = {REG_BC, REG_DE, REG_HL, REG_SP};
 static enum Register16 BC_DE_HL_AF[4] = {REG_BC, REG_DE, REG_HL, REG_AF};
 
-static uint8 getHighByte(GameBoy* gb, enum Register16 reg) {
-    return gb->registers[reg] >> 8;
-}
-
-static uint8 getLowByte(GameBoy* gb, enum Register16 reg) {
-    return gb->registers[reg] & 0xFF;
-}
-
-static uint8 getCarryBit(GameBoy* gb) {
-    uint8 flags = getLowByte(gb, REG_AF);
-
-    return (flags >> 4) & 0x01;
-}
-
-static void setHighByte(GameBoy* gb, enum Register16 reg, uint8 value) {
-    gb->registers[reg] =
-        (value << 8) | (gb->registers[reg] & 0xFF);
-}
-
-static void setLowByte(GameBoy* gb, enum Register16 reg, uint8 value) {
-    gb->registers[reg] =
-        (gb->registers[reg] & 0xFF00) | value;
-}
-
 static uint16 read16Bits(uint8* address) {
-    return (address[0] << 8) | address[1];
+    return (address[1] << 8) | address[0];
 }
 
 static void write16Bits(uint8* address, uint16 value) {
-    address[0] = value >> 8;
-    address[1] = value & 0xFF;
+    address[0] = value & 0xFF;
+    address[1] = value >> 8;
 }
 
 static uint16 get16BitArgument(uint8* instr) {
@@ -58,50 +34,8 @@ static int8 getSigned8BitArgument(uint8* instr) {
     return (int8) instr[1];
 }
 
-static uint8 getReg8(GameBoy* gb, uint8 index) {
-    switch (index) {
-    case REG_B:
-        return getHighByte(gb, REG_BC);
-    case REG_C:
-        return getLowByte(gb, REG_BC);
-    case REG_D:
-        return getHighByte(gb, REG_DE);
-    case REG_E:
-        return getLowByte(gb, REG_DE);
-    case REG_H:
-        return getHighByte(gb, REG_HL);
-    case REG_L:
-        return getLowByte(gb, REG_HL);
-    case REG_A:
-        return getHighByte(gb, REG_AF);
-    default:
-        fprintf(stderr, "Unknown 8-bit register index %u\n", index);
-        exit(1);
-        break;
-    }
-}
-
-static void setReg8(GameBoy* gb, uint8 index, uint8 value) {
-    switch (index) {
-    case REG_B:
-        setHighByte(gb, REG_BC, value);
-    case REG_C:
-        setLowByte(gb, REG_BC, value);
-    case REG_D:
-        setHighByte(gb, REG_DE, value);
-    case REG_E:
-        setLowByte(gb, REG_DE, value);
-    case REG_H:
-        setHighByte(gb, REG_HL, value);
-    case REG_L:
-        setLowByte(gb, REG_HL, value);
-    case REG_A:
-        setHighByte(gb, REG_AF, value);
-    default:
-        fprintf(stderr, "Unknown 8-bit register index %u\n", index);
-        exit(1);
-        break;
-    }
+static void updateZeroFlag(GameBoy* gb, uint8 result) {
+    setFlag(gb, FLAG_Z, result == 0);
 }
 
 typedef struct InstructionHandler {
@@ -225,106 +159,150 @@ INSTRUCTION_EXECUTE_FN(pop) {
 
 INSTRUCTION_EXECUTE_FN(addReg) {
     enum Register8 rhs = instr[0] - 0x80;
+    uint8 result = getReg8(gb, REG_A) + getReg8(gb, rhs);
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + getReg8(gb, rhs));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(addImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + instr[1]);
+    uint8 result = getReg8(gb, REG_A) + instr[1];
+    
+    setReg8(gb, REG_A, result);
+    
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(addAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + MEM(REG(HL)));
+    uint8 result = getReg8(gb, REG_A) + MEM(REG(HL));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(adcReg) {
     enum Register8 rhs = instr[0] - 0x88;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + getReg8(gb, rhs) + getCarryBit(gb));
+    uint8 result = getReg8(gb, REG_A) + getReg8(gb, rhs) + getFlag(gb, FLAG_C);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(adcImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + instr[1] + getCarryBit(gb));
+    uint8 result = getReg8(gb, REG_A) + instr[1] + getFlag(gb, FLAG_C);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(adcAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) + MEM(REG(HL) + getCarryBit(gb)));
+    uint8 result = getReg8(gb, REG_A) + MEM(REG(HL) + getFlag(gb, FLAG_C));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(subReg) {
     enum Register8 rhs = instr[0] - 0x90;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - getReg8(gb, rhs));
+    uint8 result = getReg8(gb, REG_A) - getReg8(gb, rhs);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(subImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - instr[1]);
+    uint8 result = getReg8(gb, REG_A) - instr[1];
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(subAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - MEM(REG(HL)));
+    uint8 result = getReg8(gb, REG_A) - MEM(REG(HL));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(sbcReg) {
     enum Register8 rhs = instr[0] - 0x98;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - getReg8(gb, rhs) - getCarryBit(gb));
+    uint8 result = getReg8(gb, REG_A) - getReg8(gb, rhs) - getFlag(gb, FLAG_C);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(sbcImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - instr[1] - getCarryBit(gb));
+    uint8 result = getReg8(gb, REG_A) - instr[1] - getFlag(gb, FLAG_C);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(sbcAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) - MEM(REG(HL)) - getCarryBit(gb));
+    uint8 result = getReg8(gb, REG_A) - MEM(REG(HL)) - getFlag(gb, FLAG_C);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(andReg) {
     enum Register8 rhs = instr[0] - 0xA0;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) & getReg8(gb, rhs));
+    uint8 result = getReg8(gb, REG_A) & getReg8(gb, rhs);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(andImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) & instr[1]);
+    uint8 result = getReg8(gb, REG_A) & instr[1];
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(andAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) & MEM(REG(HL)));
+    uint8 result = getReg8(gb, REG_A) & MEM(REG(HL));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(xorReg) {
     enum Register8 rhs = instr[0] - 0xA8;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) ^ getReg8(gb, rhs));
+    uint8 result = getReg8(gb, REG_A) ^ getReg8(gb, rhs);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(xorImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) ^ instr[1]);
+    uint8 result = getReg8(gb, REG_A) ^ instr[1];
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(xorAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) ^ MEM(REG(HL)));
+    uint8 result = getReg8(gb, REG_A) ^ MEM(REG(HL));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
 INSTRUCTION_EXECUTE_FN(orReg) {
     enum Register8 rhs = instr[0] - 0xB0;
 
-    setReg8(gb, REG_A, getReg8(gb, REG_A) | getReg8(gb, rhs));
+    uint8 result = getReg8(gb, REG_A) | getReg8(gb, rhs);
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(orImm8) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) | instr[1]);
+    uint8 result = getReg8(gb, REG_A) | instr[1];
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(orAddrHL) {
-    setReg8(gb, REG_A, getReg8(gb, REG_A) | MEM(REG(HL)));
+    uint8 result = getReg8(gb, REG_A) | MEM(REG(HL));
+    setReg8(gb, REG_A, result);
+    updateZeroFlag(gb, result);
 }
 
 
@@ -332,39 +310,51 @@ INSTRUCTION_EXECUTE_FN(compareReg) {
     enum Register8 rhs = instr[0] - 0xB8;
 
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(compareImm8) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(compareAddrHL) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 
 INSTRUCTION_EXECUTE_FN(incReg) {
     enum Register8 reg = (instr[0] - 0x04) >> 3;
 
-    setReg8(gb, reg, getReg8(gb, reg) + 1);
+    uint8 result = getReg8(gb, reg) + 1;
+    setReg8(gb, reg, result);
+
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(incAddrHL) {
     MEM(REG(HL))++;
+    updateZeroFlag(gb, MEM(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(decReg) {
     enum Register8 reg = (instr[0] - 0x05) >> 3;
 
-    setReg8(gb, reg, getReg8(gb, reg) - 1);
+    uint8 result = getReg8(gb, reg) - 1;
+    setReg8(gb, reg, result);
+    
+    updateZeroFlag(gb, result);
 }
 
 INSTRUCTION_EXECUTE_FN(decAddrHL) {
     MEM(REG(HL))--;
+    updateZeroFlag(gb, MEM(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(decimalAdjust) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(complement) {
@@ -413,7 +403,8 @@ INSTRUCTION_EXECUTE_FN(rotateALeft) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateALeftThroughCarry) {
-    // TODO(octave)    
+    // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(rotateARight) {
@@ -422,7 +413,8 @@ INSTRUCTION_EXECUTE_FN(rotateARight) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateARightThroughCarry) {
-    // TODO(octave)    
+    // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeft) {
@@ -437,10 +429,12 @@ INSTRUCTION_EXECUTE_FN(rotateAddrHLLeft) {
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeftThroughCarry) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLLeftThroughCarry) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRight) {
@@ -455,10 +449,12 @@ INSTRUCTION_EXECUTE_FN(rotateAddrHLRight) {
 
 INSTRUCTION_EXECUTE_FN(rotateRegRightThroughCarry) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLRightThroughCarry) {
-    // TODO(octave) : 
+    // TODO(octave)
+    NOT_IMPLEMENTED(); 
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegLeftArithmetic) {
@@ -498,35 +494,43 @@ INSTRUCTION_EXECUTE_FN(shiftAddrHLRightLogical) {
 
 INSTRUCTION_EXECUTE_FN(testBitReg) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(setBitReg) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 
 INSTRUCTION_EXECUTE_FN(flipCarry) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(setCarry) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(nop) {
@@ -535,18 +539,20 @@ INSTRUCTION_EXECUTE_FN(nop) {
 
 INSTRUCTION_EXECUTE_FN(halt) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(stop) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 INSTRUCTION_EXECUTE_FN(disableInterrupts) {
-    MEM(0xFFFF) = 0;
+    MEM(IME) = 0;
 }
 
 INSTRUCTION_EXECUTE_FN(enableInterrupts) {
-    MEM(0xFFFF) = 1;
+    MEM(IME) = 1;
 }
 
 
@@ -558,8 +564,35 @@ INSTRUCTION_EXECUTE_FN(jumpHL) {
     REG(PC) = REG(HL);
 }
 
+enum Conditional {
+    COND_NZ,
+    COND_Z,
+    COND_NC,
+    COND_C,
+};
+
+bool32 checkCondition(GameBoy* gb, enum Conditional cond) {
+    switch (cond) {
+    case COND_NZ:
+        return !getFlag(gb, FLAG_Z);
+    case COND_Z:
+        return getFlag(gb, FLAG_Z);
+    case COND_NC:
+        return !getFlag(gb, FLAG_C);
+    case COND_C:
+        return getFlag(gb, FLAG_C);
+    default:
+        fprintf(stderr, "Unknown conditional value");
+        exit(1);
+    }
+}
+
 INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
-    // TODO(octave)
+    enum Conditional cond = (instr[0] - 0xC2) >> 3;
+
+    if (checkCondition(gb, cond)) {
+        jumpImm16(gb, instr);
+    }
 }
 
 INSTRUCTION_EXECUTE_FN(relativeJump) {
@@ -568,7 +601,11 @@ INSTRUCTION_EXECUTE_FN(relativeJump) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
-    // TODO(octave)
+    enum Conditional cond = (instr[0] - 0x20) >> 3;
+
+    if (checkCondition(gb, cond)) {
+        relativeJump(gb, instr);
+    }
 }
 
 INSTRUCTION_EXECUTE_FN(callImm16) {
@@ -578,7 +615,11 @@ INSTRUCTION_EXECUTE_FN(callImm16) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
-    // TODO(octave)
+    enum Conditional cond = (instr[0] - 0xC4) >> 3;
+
+    if (checkCondition(gb, cond)) {
+        callImm16(gb, instr);
+    }
 }
 
 INSTRUCTION_EXECUTE_FN(ret) {
@@ -587,7 +628,11 @@ INSTRUCTION_EXECUTE_FN(ret) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRet) {
-    // TODO(octave)
+    enum Conditional cond = (instr[0] - 0xC0) >> 3;
+
+    if (checkCondition(gb, cond)) {
+        ret(gb, instr);
+    }
 }
 
 INSTRUCTION_EXECUTE_FN(retAndEnableInterrupts) {
@@ -604,6 +649,7 @@ INSTRUCTION_EXECUTE_FN(reset) {
 
 INSTRUCTION_EXECUTE_FN(prefixCB) {
     // TODO(octave)
+    NOT_IMPLEMENTED();
 }
 
 #define VARIABLE_CYCLES 0xFFFF
@@ -899,7 +945,7 @@ static InstructionHandler instructionHandlers[256] = {
     {2, 12, loadIOPortImm8ToA},
     {1, 12, pop},
     {2, 8, loadIOPortCToA},
-    {},
+    {1, 4, disableInterrupts},
     {},
     {1, 16, push},
     {2, 8, andImm8},
@@ -925,5 +971,6 @@ void executeInstruction(GameBoy* gb) {
     }
 
     REG(PC) += handler->length;
+
     handler->execute(gb, instr);
 }

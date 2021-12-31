@@ -114,6 +114,20 @@ typedef struct ProgramState {
     GameBoy gb;
 } ProgramState;
 
+void test(ProgramState* state) {
+    GameBoy* gb = &state->gb;
+
+    if (!loadRom(gb, "/home/toc/dev/gameboy-emulator/roms/tetris.gb")) {
+        fprintf(stderr, "Failed to load ROM\n");
+        return;
+    }
+
+    while (true) {
+        printGameboyState(gb);
+        executeInstruction(gb);
+    }
+}
+
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     if (!platform.isInitialized) {
         platform = memory->platform;
@@ -128,6 +142,8 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     ProgramState* state = memory->permanentStorage;
 
     if (!state->isInitialized) {
+        test(state);
+        
         // Memory arenas
         initializeMemoryArena(&state->transientArena,
                               memory->transientStorageSize,
