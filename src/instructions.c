@@ -1336,7 +1336,7 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, 4, disableInterrupts),
     {},
     INSTR(1, 16, push),
-    INSTR(2, 8, andImm8),
+    INSTR(2, 8, orImm8),
     INSTR(1, 16, reset),
 
     INSTR(2, 12, loadSignedPlusSPToHL),
