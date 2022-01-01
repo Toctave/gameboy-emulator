@@ -146,6 +146,9 @@ typedef struct InputState {
 } InputState;
 
 typedef struct InputInfo {
+    int argc;
+    char** argv;
+    
     uint32 eventCount;
     InputEvent events[MAX_EVENTS_PER_FRAME];
     bool32 didResize;

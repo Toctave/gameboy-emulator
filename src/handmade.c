@@ -3,6 +3,7 @@
 #include "gameboy.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 PlatformFunctions platform;
 OpenGLFunctions gl;
@@ -112,6 +113,8 @@ typedef struct ProgramState {
     uint32 texture;
 
     GameBoy gb;
+
+    FILE* logfile;
 } ProgramState;
 
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
@@ -129,11 +132,26 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     GameBoy* gb = &state->gb;
 
     if (!state->isInitialized) {
-        if (!loadRom(gb, "/home/toc/dev/gameboy-emulator/roms/tetris.gb")) {
+        // open log file
+        state->logfile = fopen("logs.txt", "w");
+        if (!state->logfile) {
+            fprintf(stderr, "Could not create log file.\n");
+            exit(1);
+        }
+        
+        // Initialize GB
+        initializeGameboy(gb);
+        
+        if (input->argc != 2) {
+            fprintf(stderr, "Usage : ./gameboy-emulator <rom>");
+            exit(1);
+        }
+        
+        if (!loadRom(gb, input->argv[1], 0x8000)) {
             fprintf(stderr, "Failed to load ROM\n");
             return true;
         }
-        
+
         // Memory arenas
         initializeMemoryArena(&state->transientArena,
                               memory->transientStorageSize,
@@ -239,8 +257,8 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 #endif
 
-    for (int i = 0; i < 10000; i++) {
-        /* printGameboyState(gb); */
+    for (int i = 0; i < 1000; i++) {
+        printGameboyLogLine(state->logfile, gb);
         executeCycle(gb);
     }
 

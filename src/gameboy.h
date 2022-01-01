@@ -3,6 +3,7 @@
 #define GAMEBOY_SCREEN_WIDTH 160
 #define GAMEBOY_SCREEN_HEIGHT 144
 
+#include <stdio.h>
 #include "handmade_types.h"
 
 typedef struct GameBoy {
@@ -18,7 +19,7 @@ typedef struct GameBoy {
 } GameBoy;
 
 #define REG(name) gb->registers[REG_##name]
-/* #define MEM(addr) gb->memory[addr] */
+#define MMR_REG(name) gb->memory[MMR_##name]
 
 enum Register16 {
     REG_AF,
@@ -36,6 +37,7 @@ enum Register8 {
     REG_E = 3,
     REG_H = 4,
     REG_L = 5,
+    REG_F = 6,
     REG_A = 7,
 };
 
@@ -53,24 +55,22 @@ enum MemoryMappedRegister {
     MMR_NR12 = 0xFF12,
     MMR_NR13 = 0xFF13,
     MMR_NR14 = 0xFF14,
-    MMR_NR15 = 0xFF15,
-    MMR_NR16 = 0xFF16,
-    MMR_NR17 = 0xFF17,
-    MMR_NR18 = 0xFF18,
-    MMR_NR19 = 0xFF19,
-    MMR_NR1A = 0xFF1A,
-    MMR_NR1B = 0xFF1B,
-    MMR_NR1C = 0xFF1C,
-    MMR_NR1D = 0xFF1D,
-    MMR_NR1E = 0xFF1E,
-    MMR_NR1F = 0xFF1F,
-    MMR_NR20 = 0xFF20,
-    MMR_NR21 = 0xFF21,
-    MMR_NR22 = 0xFF22,
-    MMR_NR23 = 0xFF23,
-    MMR_NR24 = 0xFF24,
-    MMR_NR25 = 0xFF25,
-    MMR_NR26 = 0xFF26,
+    MMR_NR21 = 0xFF16,
+    MMR_NR22 = 0xFF17,
+    MMR_NR23 = 0xFF18,
+    MMR_NR24 = 0xFF19,
+    MMR_NR30 = 0xFF1A,
+    MMR_NR31 = 0xFF1B,
+    MMR_NR32 = 0xFF1C,
+    MMR_NR33 = 0xFF1D,
+    MMR_NR34 = 0xFF1E,
+    MMR_NR41 = 0xFF20,
+    MMR_NR42 = 0xFF21,
+    MMR_NR43 = 0xFF22,
+    MMR_NR44 = 0xFF23,
+    MMR_NR50 = 0xFF24,
+    MMR_NR51 = 0xFF25,
+    MMR_NR52 = 0xFF26,
     MMR_WAV  = 0xFF30,
     MMR_LCDC = 0xFF40,
     MMR_STAT = 0xFF41,
@@ -132,9 +132,12 @@ uint8 getReg8(GameBoy* gb, uint8 index);
 void setReg8(GameBoy* gb, uint8 index, uint8 value);
 
 void executeCycle(GameBoy* gb);
-void printGameboyState(GameBoy* gb);
 
-bool32 loadRom(GameBoy* gb, const char* filename);
+void gbprintf(GameBoy* gb, const char* message, ...);
+void printGameboyState(GameBoy* gb);
+void printGameboyLogLine(FILE* file, GameBoy* gb);
+
+bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize);
 void drawBackground(GameBoy* gb);
 
 void gbError(GameBoy* gb, const char* message, ...);

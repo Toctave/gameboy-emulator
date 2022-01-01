@@ -572,6 +572,8 @@ int main(int argc, char** argv) {
     XFlush(ctx.dpy);
 
     InputInfo inputInfo = {};
+    inputInfo.argc = argc;
+    inputInfo.argv = argv;
 
     WM_DELETE_WINDOW = XInternAtom(ctx.dpy, "WM_DELETE_WINDOW", true);
     if (!XSetWMProtocols(ctx.dpy, ctx.window, &WM_DELETE_WINDOW, 1)) {
