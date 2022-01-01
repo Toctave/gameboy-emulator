@@ -29,8 +29,9 @@ typedef struct GameBoy {
 
     uint16 variableCycles;
     uint16 clock;
+    bool32 halted;
+    
     uint16 callStackHeight;
-
     uint32 tracing;
 } GameBoy;
 

@@ -865,8 +865,7 @@ INSTRUCTION_EXECUTE_FN(nop) {
 }
 
 INSTRUCTION_EXECUTE_FN(halt) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    gb->halted = true;
 }
 
 INSTRUCTION_EXECUTE_FN(stop) {
@@ -1358,7 +1357,7 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, 16, reset),
 };
 
-void executeInstruction(GameBoy* gb) {
+uint8 executeInstruction(GameBoy* gb) {
     uint16 prevPC = REG(PC);
     uint8* instr = &gb->memory[REG(PC)];
     InstructionHandler* handler = &instructionHandlers[instr[0]];
@@ -1398,27 +1397,7 @@ void executeInstruction(GameBoy* gb) {
         duration = gb->variableCycles;
     }
 
-    uint8 tac = MMR_REG(TAC);
-    if (getBit(tac, 2)) {
-        uint16 clockPeriods[] = {
-            0x400,
-            0x10,
-            0x40,
-            0x100,
-        };
-
-        uint16 clockPeriod = clockPeriods[tac & 0x3];
-        gb->clock += duration;
-
-        while (gb->clock >= clockPeriod) {
-            gb->clock -= clockPeriod;
-
-            MMR_REG(TIMA)++;
-            if (!MMR_REG(TIMA)) {
-                triggerInterrupt(gb, INT_TIMER);
-            }
-        }
-    }
+    return duration;
 }
 
 void handleInterrupt(GameBoy* gb) {
@@ -1430,7 +1409,16 @@ void handleInterrupt(GameBoy* gb) {
         [INT_JOYPAD] = 0x0060, // Hi-Lo of P10-P13
     };
 
-    uint8 enabledPendingInterrupts = RD(MMR_IF) & RD(MMR_IE);
+    uint8 ifReg = RD(MMR_IF);
+    if (ifReg) {
+        gb->halted = false;
+    }
+
+    if (!gb->ime) {
+        return;
+    }
+
+    uint8 enabledPendingInterrupts = ifReg & RD(MMR_IE);
     
     // find highest-priority, enabled interrupt that was triggered
     for (uint8 interruptIndex = 0;
@@ -1455,9 +1443,39 @@ void handleInterrupt(GameBoy* gb) {
     }
 }
 
-void executeCycle(GameBoy* gb) {
-    executeInstruction(gb);
-    if (gb->ime) {
-        handleInterrupt(gb);
+static void stepClock(GameBoy* gb, uint8 duration) {
+    uint8 tac = MMR_REG(TAC);
+    if (getBit(tac, 2)) {
+        uint16 clockPeriods[] = {
+            0x400,
+            0x10,
+            0x40,
+            0x100,
+        };
+
+        uint16 clockPeriod = clockPeriods[tac & 0x3];
+        gb->clock += duration;
+
+        while (gb->clock >= clockPeriod) {
+            gb->clock -= clockPeriod;
+
+            MMR_REG(TIMA)++;
+            if (!MMR_REG(TIMA)) {
+                triggerInterrupt(gb, INT_TIMER);
+            }
+        }
     }
+}
+
+void executeCycle(GameBoy* gb) {
+    uint8 duration;
+    if (gb->halted) {
+        duration = 4; // if halted, wait one cycle
+    } else {
+        duration = executeInstruction(gb);
+    }
+
+    stepClock(gb, duration);
+    
+    handleInterrupt(gb);
 }
