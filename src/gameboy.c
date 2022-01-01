@@ -6,10 +6,10 @@
 #include <stdarg.h>
 
 uint8 readMemory(GameBoy* gb, uint16 address) {
-    /* if (address == MMR_LY) { */
+    if (address == MMR_LY) {
         /* TODO(octave) : remove this when properly rendering */
-        /* return 0x91; */
-    /* } */
+        return 0x90;
+    }
     
     return gb->memory[address];
 }

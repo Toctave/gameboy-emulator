@@ -133,6 +133,10 @@ INSTRUCTION_EXECUTE_FN(loadAToAddr16) {
     WR(get16BitArgument(instr), getReg8(gb, REG_A));
 }
 
+INSTRUCTION_EXECUTE_FN(loadAddr16ToA) {
+    setReg8(gb, REG_A, RD(get16BitArgument(instr)));
+}
+
 INSTRUCTION_EXECUTE_FN(loadIOPortImm8ToA) {
     setReg8(gb, REG_A, RD(0xFF00 + instr[1]));
 }
@@ -179,8 +183,8 @@ INSTRUCTION_EXECUTE_FN(loadSPToAddr16) {
     writeMemory16(gb, get16BitArgument(instr), REG(SP));
 }
 
-INSTRUCTION_EXECUTE_FN(loadSPToHL) {
-    REG(HL) = REG(SP);
+INSTRUCTION_EXECUTE_FN(loadHLToSP) {
+    REG(SP) = REG(HL);
 }
 
 static void doPush(GameBoy* gb, uint16 value) {
@@ -500,8 +504,8 @@ INSTRUCTION_EXECUTE_FN(addSignedToSP) {
 
     setFlag(gb, FLAG_Z, 0);
     setFlag(gb, FLAG_N, 0);
-    // TODO(octave) : update half-carry flag
-    setFlag(gb, FLAG_C, result32 >> 16);
+    setFlag(gb, FLAG_H, ((lhs & 0xF) + (rhs & 0xF)) & 0x10);
+    setFlag(gb, FLAG_C, ((lhs & 0xFF) + (rhs & 0xFF)) & 0x100);
 }
 
 INSTRUCTION_EXECUTE_FN(loadSignedPlusSPToHL) {
@@ -513,8 +517,8 @@ INSTRUCTION_EXECUTE_FN(loadSignedPlusSPToHL) {
 
     setFlag(gb, FLAG_Z, 0);
     setFlag(gb, FLAG_N, 0);
-    // TODO(octave) : update half-carry flag
-    setFlag(gb, FLAG_C, result32 >> 16);
+    setFlag(gb, FLAG_H, ((lhs & 0xF) + (rhs & 0xF)) & 0x10);
+    setFlag(gb, FLAG_C, ((lhs & 0xFF) + (rhs & 0xFF)) & 0x100);
 }
 
 
@@ -530,6 +534,10 @@ INSTRUCTION_EXECUTE_FN(rotateALeft) {
     uint8 a = getReg8(gb, REG_A);
     a = rotateLeft(a);
     setReg8(gb, REG_A, a);
+    
+    setFlag(gb, FLAG_Z, 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
     setFlag(gb, FLAG_C, a & 1);
 }
 
@@ -548,127 +556,224 @@ static uint8 rotateRightThroughCarry(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateALeftThroughCarry) {
-    REG(A) = rotateLeftThroughCarry(gb, REG(A));
-}
+    uint8 a = getReg8(gb, REG_A);
+    a = rotateLeftThroughCarry(gb, a);
+    
+    setReg8(gb, REG_A, a);
 
-// TODO(octave) : Flags for bit manip functions
+    setFlag(gb, FLAG_Z, 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+}
 
 INSTRUCTION_EXECUTE_FN(rotateARight) {
     uint8 a = getReg8(gb, REG_A);
-    setReg8(gb, REG_A, rotateRight(a));
+    a = rotateRight(a);
+    setReg8(gb, REG_A, a);
+
+    setFlag(gb, FLAG_Z, 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, a >> 7);
 }
 
 INSTRUCTION_EXECUTE_FN(rotateARightThroughCarry) {
-    REG(A) = rotateRightThroughCarry(gb, REG(A));
+    uint8 a = getReg8(gb, REG_A);
+    a = rotateRightThroughCarry(gb, a);
+    
+    setReg8(gb, REG_A, a);
+
+    setFlag(gb, FLAG_Z, 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+}
+
+static uint8 doRotateLeft(GameBoy* gb, uint8 value) {
+    uint8 rotated = rotateLeft(value);
+    
+    setFlag(gb, FLAG_Z, rotated == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, value >> 7);
+
+    return rotated;
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeft) {
     enum Register8 reg = instr[0];
 
-    setReg8(gb, reg, rotateLeft(getReg8(gb, reg)));
+    setReg8(gb, reg, doRotateLeft(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLLeft) {
-    WR(REG(HL), rotateLeft(RD(REG(HL))));
+    WR(REG(HL), doRotateLeft(gb, RD(REG(HL))));
+}
+
+static uint8 doRotateLeftThroughCarry(GameBoy* gb, uint8 value) {
+    uint8 rotated = rotateLeftThroughCarry(gb, value);
+    
+    setFlag(gb, FLAG_Z, rotated == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+
+    return rotated;
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeftThroughCarry) {
     enum Register8 reg = instr[0] - 0x10;
 
-    setReg8(gb, reg, rotateLeftThroughCarry(gb, getReg8(gb, reg)));
+    setReg8(gb, reg, doRotateLeftThroughCarry(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLLeftThroughCarry) {
-    WR(REG(HL), rotateLeftThroughCarry(gb, RD(REG(HL))));
+    WR(REG(HL), doRotateLeftThroughCarry(gb, RD(REG(HL))));
+}
+
+static uint8 doRotateRight(GameBoy* gb, uint8 value) {
+    uint8 rotated = rotateRight(value);
+    
+    setFlag(gb, FLAG_Z, rotated == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, value & 1);
+
+    return rotated;
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRight) {
     enum Register8 reg = instr[0] - 0x08;
 
-    setReg8(gb, reg, rotateRight(getReg8(gb, reg)));
+    setReg8(gb, reg, doRotateRight(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLRight) {
-    WR(REG(HL), rotateRight(RD(REG(HL))));
+    WR(REG(HL), doRotateRight(gb, RD(REG(HL))));
+}
+
+static uint8 doRotateRightThroughCarry(GameBoy* gb, uint8 value) {
+    uint8 rotated = rotateRightThroughCarry(gb, value);
+    
+    setFlag(gb, FLAG_Z, rotated == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+
+    return rotated;
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRightThroughCarry) {
     enum Register8 reg = instr[0] - 0x18;
 
-    setReg8(gb, reg, rotateRightThroughCarry(gb, getReg8(gb, reg)));
+    setReg8(gb, reg, doRotateRightThroughCarry(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLRightThroughCarry) {
-    WR(REG(HL), rotateRightThroughCarry(gb, RD(REG(HL))));
+    WR(REG(HL), doRotateRightThroughCarry(gb, RD(REG(HL))));
+}
+
+static uint8 doShiftLeftArithmetic(GameBoy* gb, uint8 value) {
+    uint8 result = value << 1;
+
+    setFlag(gb, FLAG_Z, result == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, value >> 7);
+
+    return result;
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegLeftArithmetic) {
     enum Register8 reg = instr[0] - 0x20;
 
-    setReg8(gb, reg, getReg8(gb, reg) << 1);
+    setReg8(gb, reg, doShiftLeftArithmetic(gb, getReg8(gb, reg)));
 }
 
-uint8 shiftRightArithmetic(uint8 value) {
-    return (value >> 1) | (value & 0x80);
+INSTRUCTION_EXECUTE_FN(shiftAddrHLLeftArithmetic) {
+    WR(REG(HL), doShiftLeftArithmetic(gb, RD(REG(HL))));
+}
+
+static uint8 doShiftRightArithmetic(GameBoy* gb, uint8 value) {
+    uint8 result = (value >> 1) | (value & 0x80);
+
+    setFlag(gb, FLAG_Z, result == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, value & 0);
+
+    return result;
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightArithmetic) {
     enum Register8 reg = instr[0] - 0x20;
 
-    setReg8(gb, reg, shiftRightArithmetic(getReg8(gb, reg)));
-}
-
-INSTRUCTION_EXECUTE_FN(shiftAddrHLLeftArithmetic) {
-    WR(REG(HL), RD(REG(HL)) << 1);
+    setReg8(gb, reg, doShiftRightArithmetic(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLRightArithmetic) {
-    WR(REG(HL), shiftRightArithmetic(RD(REG(HL))));
+    WR(REG(HL), doShiftRightArithmetic(gb, RD(REG(HL))));
 }
 
-uint8 swapNibbles(uint8 value) {
-    return (value >> 4) | (value << 4);
+uint8 doSwapNibbles(GameBoy* gb, uint8 value) {
+    uint8 result = (value >> 4) | (value << 4);
+    
+    setFlag(gb, FLAG_Z, result == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, 0);
+
+    return result;
 }
 
 INSTRUCTION_EXECUTE_FN(swapNibblesReg) {
     enum Register8 reg = instr[0] - 0x30;
 
-    setReg8(gb, reg, swapNibbles(getReg8(gb, reg)));
+    setReg8(gb, reg, doSwapNibbles(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(swapNibblesAddrHL) {
-    WR(REG(HL), swapNibbles(RD(REG(HL))));
+    WR(REG(HL), doSwapNibbles(gb, RD(REG(HL))));
+}
+
+
+uint8 doShiftRightLogical(GameBoy* gb, uint8 value) {
+    uint8 result = value >> 1;
+    
+    setFlag(gb, FLAG_Z, result == 0);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
+    setFlag(gb, FLAG_C, value & 1);
+
+    return result;
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightLogical) {
     enum Register8 reg = instr[0] - 0x38;
 
-    setReg8(gb, reg, getReg8(gb, reg) >> 1);
+    setReg8(gb, reg, doShiftRightLogical(gb, getReg8(gb, reg)));
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLRightLogical) {
-    WR(REG(HL), RD(REG(HL)) >> 1);
+    WR(REG(HL), doShiftRightLogical(gb, RD(REG(HL)) >> 1));
 }
 
+
+static void doTestBit(GameBoy* gb, uint8 byte, uint8 bitIndex) {
+    uint8 bitValue = getBit(byte, bitIndex);
+
+    setFlag(gb, FLAG_Z, !bitValue);
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 1);
+}
 
 INSTRUCTION_EXECUTE_FN(testBitReg) {
     enum Register8 reg = instr[0] % 8;
 
     uint8 bitIndex = (instr[0] - 0x40) >> 3;
-    uint8 bitValue = getBit(getReg8(gb, reg), bitIndex);
-
-    setFlag(gb, FLAG_Z, bitValue);
-    setFlag(gb, FLAG_N, 0);
-    setFlag(gb, FLAG_H, 1);
+    doTestBit(gb, getReg8(gb, reg), bitIndex);
 }
 
 INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0x40) >> 3;
-    uint8 bitValue = getBit(RD(REG(HL)), bitIndex);
-
-    setFlag(gb, FLAG_Z, bitValue);
-    setFlag(gb, FLAG_N, 0);
-    setFlag(gb, FLAG_H, 1);
+    doTestBit(gb, RD(REG(HL)), bitIndex);
 }
 
 uint8 setBit(uint8 value, uint8 index) {
@@ -1200,9 +1305,9 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(2, 8, andImm8),
     INSTR(1, 16, reset),
 
-    INSTR(2, 16, addSignedToSP),
-    INSTR(1, 4, jumpHL),
-    INSTR(3, 16, loadAToAddr16),
+    INSTR(2, 12, loadSignedPlusSPToHL),
+    INSTR(1, 8, loadHLToSP),
+    INSTR(3, 16, loadAddr16ToA),
     INSTR(1, 4, enableInterrupts),
     {},
     {},

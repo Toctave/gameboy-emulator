@@ -257,7 +257,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 #endif
 
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 100000; i++) {
         printGameboyLogLine(state->logfile, gb);
         executeCycle(gb);
     }
