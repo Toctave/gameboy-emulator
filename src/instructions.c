@@ -207,6 +207,10 @@ INSTRUCTION_EXECUTE_FN(push) {
 INSTRUCTION_EXECUTE_FN(pop) {
     enum Register16 dst = BC_DE_HL_AF[(instr[0] - 0xC1) >> 4];
     gb->registers[dst] = doPop(gb);
+    
+    if (dst == REG_AF) {
+        gb->registers[dst] = gb->registers[dst] & 0xFFF0;
+    }
 }
 
 static void doAdd(GameBoy* gb, uint8 rhs) {
