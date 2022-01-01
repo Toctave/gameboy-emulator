@@ -20,6 +20,8 @@ typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 static enum Register16 BC_DE_HL_SP[4] = {REG_BC, REG_DE, REG_HL, REG_SP};
 static enum Register16 BC_DE_HL_AF[4] = {REG_BC, REG_DE, REG_HL, REG_AF};
 
+#if 0
+
 static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
     for (uint16 i = 0; i < gb->callStackHeight; i++) {
         if (i > 10) {
@@ -31,6 +33,13 @@ static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
     
     vprintf(message, args);
 }
+
+#else
+
+static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
+}
+
+#endif
 
 void gbprintf(GameBoy* gb, const char* message, ...) {
     va_list args;
@@ -731,13 +740,13 @@ static uint8 doShiftRightArithmetic(GameBoy* gb, uint8 value) {
     setFlag(gb, FLAG_Z, result == 0);
     setFlag(gb, FLAG_N, 0);
     setFlag(gb, FLAG_H, 0);
-    setFlag(gb, FLAG_C, value & 0);
+    setFlag(gb, FLAG_C, value & 1);
 
     return result;
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightArithmetic) {
-    enum Register8 reg = instr[0] - 0x20;
+    enum Register8 reg = instr[0] - 0x28;
 
     setReg8(gb, reg, doShiftRightArithmetic(gb, getReg8(gb, reg)));
 }
@@ -786,7 +795,7 @@ INSTRUCTION_EXECUTE_FN(shiftRegRightLogical) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLRightLogical) {
-    WR(REG(HL), doShiftRightLogical(gb, RD(REG(HL)) >> 1));
+    WR(REG(HL), doShiftRightLogical(gb, RD(REG(HL))));
 }
 
 
@@ -834,24 +843,28 @@ uint8 resetBit(uint8 value, uint8 index) {
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
     enum Register8 reg = instr[0] % 8;
-    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    uint8 bitIndex = (instr[0] - 0x80) >> 3;
     uint8 regVal = getReg8(gb, reg);
 
     setReg8(gb, reg, resetBit(regVal, bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
-    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    uint8 bitIndex = (instr[0] - 0x80) >> 3;
 
     WR(REG(HL), resetBit(RD(REG(HL)), bitIndex));
 }
 
 
 INSTRUCTION_EXECUTE_FN(flipCarry) {
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
     setFlag(gb, FLAG_C, !getFlag(gb, FLAG_C));
 }
 
 INSTRUCTION_EXECUTE_FN(setCarry) {
+    setFlag(gb, FLAG_N, 0);
+    setFlag(gb, FLAG_H, 0);
     setFlag(gb, FLAG_C, 1);
 }
 

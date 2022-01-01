@@ -18,7 +18,8 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
     gb->memory[address] = value;
 
     if (address == MMR_SC && value == 0x81) {
-        printf("Serial write : '%c' (0x%02X)\n", gb->memory[MMR_SB], gb->memory[MMR_SB]);
+        /* printf("Serial write : '%c' (0x%02X)\n", gb->memory[MMR_SB], gb->memory[MMR_SB]); */
+        printf("%c", gb->memory[MMR_SB]);
     }
 }
 
