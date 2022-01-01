@@ -457,9 +457,39 @@ INSTRUCTION_EXECUTE_FN(decAddrHL) {
     setFlag(gb, FLAG_H, ((lhs & 0x0F) - 1) & 0x10);
 }
 
+// Source : https://forums.nesdev.org/viewtopic.php?t=15944
 INSTRUCTION_EXECUTE_FN(decimalAdjust) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    bool32 h = getFlag(gb, FLAG_H);
+    bool32 c = getFlag(gb, FLAG_C);
+    bool32 n = getFlag(gb, FLAG_N);
+    
+    uint8 a = getReg8(gb, REG_A);
+    
+    // note: assumes a is a uint8_t and wraps from 0xff to 0
+    if (!n) {
+        // after an addition, adjust if (half-)carry occurred or if result is out of bounds
+        if (c || a > 0x99) {
+            a += 0x60;
+            setFlag(gb, FLAG_C, 1);
+        }
+        if (h || (a & 0x0f) > 0x09) {
+            a += 0x6;
+        }
+    } else {
+        // after a subtraction, only adjust if (half-)carry occurred
+        if (c) {
+            a -= 0x60;
+        }
+        if (h) {
+            a -= 0x6;
+        }
+    }
+
+    setReg8(gb, REG_A, a);
+    
+    // these flags are always updated
+    setFlag(gb, FLAG_Z, (a == 0));
+    setFlag(gb, FLAG_H, 0);
 }
 
 INSTRUCTION_EXECUTE_FN(complement) {
