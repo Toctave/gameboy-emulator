@@ -1,7 +1,10 @@
 #include "gameboy.h"
 
+#include "handmade.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #define INSTRUCTION_EXECUTE_FN_NOSTATIC(name) \
     void name(GameBoy* gb, uint8* instr)
@@ -13,6 +16,24 @@ typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 
 static enum Register16 BC_DE_HL_SP[4] = {REG_BC, REG_DE, REG_HL, REG_SP};
 static enum Register16 BC_DE_HL_AF[4] = {REG_BC, REG_DE, REG_HL, REG_AF};
+
+static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
+    for (uint16 i = 0; i < gb->callStackHeight; i++) {
+        printf(" ");
+    }
+    
+    vprintf(message, args);
+}
+
+static void gbprintf(GameBoy* gb, const char* message, ...) {
+    va_list args;
+    
+    va_start(args, message);
+
+    vgbprintf(gb, message, args);
+
+    va_end(args);
+}
 
 static uint16 read16Bits(uint8* address) {
     return (address[1] << 8) | address[0];
@@ -46,28 +67,28 @@ typedef struct InstructionHandler {
 } InstructionHandler;
 
 INSTRUCTION_EXECUTE_FN(loadRegToReg) {
-    uint8 srcIndex = instr[0] & 0x7;
-    uint8 dstIndex = (instr[0] >> 3) & 0x7;
+    enum Register8 src = instr[0] & 0x7;
+    enum Register8 dst = (instr[0] >> 3) & 0x7;
 
-    setReg8(gb, dstIndex, getReg8(gb, srcIndex));
+    setReg8(gb, dst, getReg8(gb, src));
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm8ToReg) {
-    uint8 regIndex = (instr[0] - 6) >> 3;
+    enum Register8 reg = (instr[0] - 6) >> 3;
 
-    setReg8(gb, regIndex, instr[1]);
+    setReg8(gb, reg, instr[1]);
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddrHLToReg) {
-    uint8 dstIndex = (instr[0] >> 3) & 0x7;
+    enum Register8 dst = (instr[0] >> 3) & 0x7;
     
-    setReg8(gb, dstIndex, MEM(REG(HL)));
+    setReg8(gb, dst, MEM(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadRegToAddrHL) {
-    uint8 srcIndex = instr[0] & 0x7;
+    enum Register8 src = instr[0] & 0x7;
     
-    MEM(REG(HL)) = getReg8(gb, srcIndex);
+    MEM(REG(HL)) = getReg8(gb, src);
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm8ToAddrHL) {
@@ -536,18 +557,26 @@ INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
     setFlag(gb, FLAG_H, 1);
 }
 
+uint8 setBit(uint8 value, uint8 index) {
+    return value | (1 << index);
+}
+
 INSTRUCTION_EXECUTE_FN(setBitReg) {
     enum Register8 reg = instr[0] % 8;
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
     uint8 regVal = getReg8(gb, reg);
 
-    setReg8(gb, reg, regVal | (1 << bitIndex));
+    setReg8(gb, reg, setBit(regVal, bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
 
-    MEM(REG(HL)) = MEM(REG(HL)) | (1 << bitIndex);
+    MEM(REG(HL)) = setBit(MEM(REG(HL)), bitIndex);
+}
+
+uint8 resetBit(uint8 value, uint8 index) {
+    return value & ~(1 << index);
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
@@ -555,24 +584,22 @@ INSTRUCTION_EXECUTE_FN(resetBitReg) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
     uint8 regVal = getReg8(gb, reg);
 
-    setReg8(gb, reg, regVal & ~(1 << bitIndex));
+    setReg8(gb, reg, resetBit(regVal, bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
 
-    MEM(REG(HL)) = MEM(REG(HL)) & ~(1 << bitIndex);
+    MEM(REG(HL)) = resetBit(REG(HL), bitIndex);
 }
 
 
 INSTRUCTION_EXECUTE_FN(flipCarry) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    setFlag(gb, FLAG_C, !getFlag(gb, FLAG_C));
 }
 
 INSTRUCTION_EXECUTE_FN(setCarry) {
-    // TODO(octave)
-    NOT_IMPLEMENTED();
+    setFlag(gb, FLAG_C, 1);
 }
 
 INSTRUCTION_EXECUTE_FN(nop) {
@@ -590,11 +617,11 @@ INSTRUCTION_EXECUTE_FN(stop) {
 }
 
 INSTRUCTION_EXECUTE_FN(disableInterrupts) {
-    MEM(MMR_IME) = 0;
+    gb->ime = 0;
 }
 
 INSTRUCTION_EXECUTE_FN(enableInterrupts) {
-    MEM(MMR_IME) = 1;
+    gb->ime = 1;
 }
 
 
@@ -602,14 +629,14 @@ INSTRUCTION_EXECUTE_FN(jumpImm16) {
     uint16 prevPC = REG(PC);
     REG(PC) = get16BitArgument(instr);
 
-    /* printf("Jump 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
+    /* gbprintf(gb, "Jump 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(jumpHL) {
     uint16 prevPC = REG(PC);
     REG(PC) = REG(HL);
     
-    /* printf("Jump HL 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
+    /* gbprintf(gb, "Jump HL 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 enum Conditional {
@@ -665,7 +692,8 @@ INSTRUCTION_EXECUTE_FN(callImm16) {
     write16Bits(&MEM(REG(SP)), REG(PC));
     REG(PC) = get16BitArgument(instr);
 
-    printf("Call 0x%04X -> 0x%04X\n", prevPC, REG(PC));
+    gbprintf(gb, "Call 0x%04X -> 0x%04X\n", prevPC, REG(PC));
+    gb->callStackHeight++;
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
@@ -682,7 +710,8 @@ INSTRUCTION_EXECUTE_FN(ret) {
     REG(PC) = read16Bits(&MEM(REG(SP)));
     REG(SP) += 2;
 
-    printf("Return 0x%04X -> 0x%04X\n", prevPC, REG(PC));
+    gbprintf(gb, "Return 0x%04X -> 0x%04X\n", prevPC, REG(PC));
+    gb->callStackHeight--;
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRet) {
@@ -899,14 +928,14 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, 4, loadRegToReg),
 
     // 70
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 4, loadRegToAddrHL),
     INSTR(1, 4, halt),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(1, 4, loadRegToAddrHL),
 
     INSTR(1, 4, loadRegToReg),
     INSTR(1, 4, loadRegToReg),
@@ -1034,7 +1063,7 @@ static InstructionHandler instructionHandlers[256] = {
     // E0
     INSTR(2, 12, loadAToIOPortImm8),
     INSTR(1, 12, pop),
-    INSTR(2, 8, loadAToIOPortC),
+    INSTR(1, 8, loadAToIOPortC),
     {},
     {},
     INSTR(1, 16, push),
@@ -1053,7 +1082,7 @@ static InstructionHandler instructionHandlers[256] = {
     // F0
     INSTR(2, 12, loadIOPortImm8ToA),
     INSTR(1, 12, pop),
-    INSTR(2, 8, loadIOPortCToA),
+    INSTR(1, 8, loadIOPortCToA),
     INSTR(1, 4, disableInterrupts),
     {},
     INSTR(1, 16, push),
@@ -1084,4 +1113,47 @@ void executeInstruction(GameBoy* gb) {
     REG(PC) += handler->length;
 
     handler->execute(gb, instr);
+}
+
+void handleInterrupt(GameBoy* gb) {
+    uint16 interruptAddresses[] = {
+        0x0040, // V-blank
+        0x0048, // LCDC Status
+        0x0050, // Timer overflow
+        0x0058, // Serial transfer
+        0x0060, // Hi-Lo of P10-P13
+    };
+
+    uint8 enabledPendingInterrupts = MEM(MMR_IF) & MEM(MMR_IE);
+    
+    // find highest-priority, enabled interrupt that was triggered
+    for (uint8 interruptIndex = 0;
+         interruptIndex < ARRAY_COUNT(interruptAddresses);
+         interruptIndex++) {
+        if (getBit(MEM(MMR_IF), interruptIndex)) {
+            gbprintf(gb, "Handling interrupt %d\n", interruptIndex);
+            gb->callStackHeight++;
+            
+            // disable interrupts
+            gb->ime = 0;
+
+            // reset this interrupt's flag
+            MEM(MMR_IF) = resetBit(MEM(MMR_IF), interruptIndex);
+        
+            // push PC
+            REG(SP) = REG(SP) - 2;
+            write16Bits(&MEM(REG(SP)), REG(PC));
+
+            // jump to interrupt handler
+            REG(PC) = interruptAddresses[interruptIndex];
+            break;
+        }
+    }
+}
+
+void executeCycle(GameBoy* gb) {
+    executeInstruction(gb);
+    if (gb->ime) {
+        handleInterrupt(gb);
+    }
 }

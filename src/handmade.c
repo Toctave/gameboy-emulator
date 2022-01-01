@@ -114,13 +114,6 @@ typedef struct ProgramState {
     GameBoy gb;
 } ProgramState;
 
-void test(ProgramState* state) {
-    GameBoy* gb = &state->gb;
-
-    while (true) {
-    }
-}
-
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     if (!platform.isInitialized) {
         platform = memory->platform;
@@ -248,10 +241,13 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
 
     for (int i = 0; i < 10000; i++) {
         /* printGameboyState(gb); */
-        executeInstruction(gb);
+        executeCycle(gb);
     }
 
     drawBackground(gb);
+
+    /* trigger V-blank interrupt */
+    MEM(MMR_IF) = setBit(MEM(MMR_IF), INT_VBLANK);
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);

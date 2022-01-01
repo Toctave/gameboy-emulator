@@ -9,7 +9,12 @@ typedef struct GameBoy {
     uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
 
     uint16 registers[6];
+    uint8 ime;
     uint8 memory[1 << 16];
+
+    uint16 clock;
+
+    uint16 callStackHeight;
 } GameBoy;
 
 #define REG(name) gb->registers[REG_##name]
@@ -35,17 +40,51 @@ enum Register8 {
 };
 
 enum MemoryMappedRegister {
+    MMR_P1 = 0xFF00,
+    MMR_SB = 0xFF01,
+    MMR_SC = 0xFF02,
+    MMR_DIV = 0xFF04,
+    MMR_TIMA = 0xFF05,
+    MMR_TMA = 0xFF06,
+    MMR_TAC = 0xFF07,
+    MMR_IF = 0xFF0F,
+    MMR_NR10 = 0xFF10,
+    MMR_NR11 = 0xFF11,
+    MMR_NR12 = 0xFF12,
+    MMR_NR13 = 0xFF13,
+    MMR_NR14 = 0xFF14,
+    MMR_NR15 = 0xFF15,
+    MMR_NR16 = 0xFF16,
+    MMR_NR17 = 0xFF17,
+    MMR_NR18 = 0xFF18,
+    MMR_NR19 = 0xFF19,
+    MMR_NR1A = 0xFF1A,
+    MMR_NR1B = 0xFF1B,
+    MMR_NR1C = 0xFF1C,
+    MMR_NR1D = 0xFF1D,
+    MMR_NR1E = 0xFF1E,
+    MMR_NR1F = 0xFF1F,
+    MMR_NR20 = 0xFF20,
+    MMR_NR21 = 0xFF21,
+    MMR_NR22 = 0xFF22,
+    MMR_NR23 = 0xFF23,
+    MMR_NR24 = 0xFF24,
+    MMR_NR25 = 0xFF25,
+    MMR_NR26 = 0xFF26,
+    MMR_WAV  = 0xFF30,
     MMR_LCDC = 0xFF40,
+    MMR_STAT = 0xFF41,
     MMR_SCY = 0xFF42,
     MMR_SCX = 0xFF43,
     MMR_LY  = 0xFF44,
     MMR_LYC = 0xFF45,
+    MMR_DMA = 0xFF46,
     MMR_BGP = 0xFF47,
     MMR_OBP0 = 0xFF48,
     MMR_OBP1 = 0xFF49,
     MMR_WY  = 0xFF4A,
     MMR_WX  = 0xFF4B,
-    MMR_IME = 0xFFFF,
+    MMR_IE = 0xFFFF,
 };
 
 enum CPUFlag {
@@ -64,7 +103,17 @@ enum SpecialAddress {
     TILEMAP1 = 0x9C00,
 };
 
+enum Interrupt {
+    INT_VBLANK,
+    INT_LCDC,
+    INT_TIMER,
+    INT_SERIAL,
+    INT_JOYPAD,
+};
+
 uint8 getBit(uint8 byte, uint8 index);
+uint8 resetBit(uint8 value, uint8 index);
+uint8 setBit(uint8 value, uint8 index);
 
 uint8 getHighByte(GameBoy* gb, enum Register16 reg);
 uint8 getLowByte(GameBoy* gb, enum Register16 reg);
@@ -77,10 +126,12 @@ void setFlag(GameBoy* gb, enum CPUFlag flag, bool32 value);
 uint8 getReg8(GameBoy* gb, uint8 index);
 void setReg8(GameBoy* gb, uint8 index, uint8 value);
 
-void executeInstruction(GameBoy* gb);
+void executeCycle(GameBoy* gb);
 void printGameboyState(GameBoy* gb);
 
 bool32 loadRom(GameBoy* gb, const char* filename);
 void drawBackground(GameBoy* gb);
 
 void gbError(GameBoy* gb, const char* message, ...);
+
+void initializeGameboy(GameBoy* gb);
