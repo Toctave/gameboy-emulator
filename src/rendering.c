@@ -5,12 +5,16 @@
 uint8 grayLevel(uint8 palette, uint8 id) {
     uint8 color = (palette >> (id * 2)) & 0x3;
 
-    uint8 shades[4] = {0, 85, 170, 255};
+    uint8 shades[4] = {255, 170, 85, 0};
     return shades[color];
 }
 
-void assembleTileLine(GameBoy* gb, uint8 palette, uint8* source, uint8* destination) {
-    for (uint8 x = 0; x < 8; x++) {
+void assembleTileLine(GameBoy* gb, uint8 palette,
+                      uint8* source, uint8* destination,
+                      uint8 offset, uint8 count) {
+    for (uint8 dx = 0; dx < count; dx++) {
+        uint8 x = offset + dx;
+        
         uint8 id_lsb = (source[0] >> (7 - x)) & 1;
         uint8 id_msb = (source[1] >> (7 - x)) & 1;
 
@@ -55,7 +59,7 @@ void drawBackground(GameBoy* gb) {
                 if (screenRow < GAMEBOY_SCREEN_HEIGHT
                     && tileX * 8 + 7 < GAMEBOY_SCREEN_WIDTH) {
                     uint8* dst = &gb->screen[screenRow][tileX * 8];
-                    assembleTileLine(gb, palette, tile + 2 * row, dst);
+                    assembleTileLine(gb, palette, tile + 2 * row, dst, 0, 8);
                 }
             }
         }

@@ -248,30 +248,32 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     for (uint32 eventIndex = 0; eventIndex < input->eventCount; eventIndex++) {
         InputEvent* event = &input->events[eventIndex];
 
-        if (event->type == EVENT_KEY
-            && event->key.pressFlag == PRESS
-            && event->key.index == KID_F5) {
-            platform.resetProgramMemory(memory);
-            return false;
+        if (event->type == EVENT_KEY) {
+            if (event->key.pressFlag == PRESS
+                && event->key.index == KID_F5) {
+                platform.resetProgramMemory(memory);
+                return false;
+            }
+
+            if (handleKey(gb, event->key.index, event->key.pressFlag)) {
+                triggerInterrupt(gb, INT_JOYPAD);
+            }
         }
     }
 #endif
 
-    for (int i = 0; i < 100000; i++) {
-        printGameboyLogLine(state->logfile, gb);
+    for (int i = 0; i < 8096; i++) {
+        /* printGameboyLogLine(state->logfile, gb); */
         executeCycle(gb);
     }
 
     drawBackground(gb);
 
-    /* trigger V-blank interrupt */
-    /* triggerInterrupt(gb, INT_VBLANK); */
+    triggerInterrupt(gb, INT_VBLANK);
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
     
-    ASSERT(ARRAY_COUNT(textureData) == width * height);
-
     gl.BindTexture(GL_TEXTURE_2D, state->texture);
     gl.BindBuffer(GL_ARRAY_BUFFER, state->vbo);
     gl.BindVertexArray(state->vao); 

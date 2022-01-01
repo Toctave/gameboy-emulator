@@ -1,5 +1,7 @@
 #pragma once
 
+#define HANDMADE_INTERNAL
+
 #include <stdint.h>
 #include "handmade_types.h"
 #include "handmade_opengl.h"

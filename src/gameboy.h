@@ -2,20 +2,36 @@
 
 #define GAMEBOY_SCREEN_WIDTH 160
 #define GAMEBOY_SCREEN_HEIGHT 144
+#define GAMEBOY_CPU_FREQUENCY 4194304
 
 #include <stdio.h>
-#include "handmade_types.h"
+#include "handmade.h"
+
+enum JoypadButton {
+    JP_A,
+    JP_B,
+    JP_SELECT,
+    JP_START,
+    JP_RIGHT,
+    JP_LEFT,
+    JP_UP,
+    JP_DOWN,
+};
 
 typedef struct GameBoy {
     uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
+
+    uint8 joypad;
 
     uint16 registers[6];
     uint8 ime;
     uint8 memory[1 << 16];
 
+    uint16 variableCycles;
     uint16 clock;
-
     uint16 callStackHeight;
+
+    uint32 tracing;
 } GameBoy;
 
 #define REG(name) gb->registers[REG_##name]
@@ -110,6 +126,13 @@ enum Interrupt {
     INT_SERIAL,
     INT_JOYPAD,
 };
+
+bool32 handleKey(GameBoy* gb, KeyIndex index, PressFlag pressFlag);
+uint8 setBit(uint8 value, uint8 index);
+uint8 resetBit(uint8 value, uint8 index);
+    
+void pressButton(GameBoy* gb, enum JoypadButton button);
+void releaseButton(GameBoy* gb, enum JoypadButton button);
 
 uint8 readMemory(GameBoy* gb, uint16 address);
 void writeMemory(GameBoy* gb, uint16 address, uint8 value);

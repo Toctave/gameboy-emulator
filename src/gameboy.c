@@ -5,16 +5,92 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-uint8 readMemory(GameBoy* gb, uint16 address) {
-    if (address == MMR_LY) {
-        /* TODO(octave) : remove this when properly rendering */
-        return 0x90;
-    }
+bool32 handleKey(GameBoy* gb, KeyIndex index, PressFlag pressFlag) {
+    enum JoypadButton button;
     
+    switch (index) {
+    case KID_W:
+        button = JP_UP;
+        break;
+    case KID_A:
+        button = JP_LEFT;
+        break;
+    case KID_S:
+        button = JP_DOWN;
+        break;
+    case KID_D:
+        button = JP_RIGHT;
+        break;
+    case KID_J:
+        button = JP_B;
+        break;
+    case KID_I:
+        button = JP_A;
+        break;
+    case KID_5:
+        button = JP_START;
+        break;
+    case KID_6:
+        button = JP_SELECT;
+        break;
+    default:
+        return false;
+    }
+
+    if (pressFlag == PRESS) {
+        pressButton(gb, button);
+    } else if (pressFlag == RELEASE) {
+        releaseButton(gb, button);
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+uint8 setBit(uint8 value, uint8 index) {
+    return value | (1 << index);
+}
+
+uint8 resetBit(uint8 value, uint8 index) {
+    return value & ~(1 << index);
+}
+
+void pressButton(GameBoy* gb, enum JoypadButton button) {
+    gb->joypad = resetBit(gb->joypad, button);
+}
+
+void releaseButton(GameBoy* gb, enum JoypadButton button) {
+    gb->joypad = setBit(gb->joypad, button);
+}
+
+uint8 readMemory(GameBoy* gb, uint16 address) {
+    /* TODO(octave) : remove this when properly rendering */
+    static uint8 currentLy = 0;
+    if (address == MMR_LY) {
+        return currentLy++;
+    }
+
+    if (address == MMR_P1) {
+        uint8 reg = gb->memory[address];
+
+        if (reg & 0x20) { // Button keys
+            return (gb->joypad & 0xF) | (reg & 0xF0);
+        } else if (reg & 0x10) { // Direction keys
+            return (gb->joypad >> 4) | (reg & 0xF0);
+        } else {
+            return 0x0F | (reg & 0xF0);
+        }
+    }
+
     return gb->memory[address];
 }
 
 void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
+    if (address < 0x8000) {
+        gbprintf(gb, "Attempt to write to ROM at 0x%04X\n", address);
+    }
+    
     gb->memory[address] = value;
 
     if (address == MMR_SC && value == 0x81) {
@@ -221,6 +297,8 @@ bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize) {
 }
 
 void initializeGameboy(GameBoy* gb) {
+    gb->joypad = 0xFF;
+    
     REG(AF) = 0x01B0;
     REG(BC) = 0x0013;
     REG(DE) = 0x00D8;

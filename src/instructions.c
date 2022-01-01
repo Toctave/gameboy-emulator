@@ -20,7 +20,7 @@ typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 static enum Register16 BC_DE_HL_SP[4] = {REG_BC, REG_DE, REG_HL, REG_SP};
 static enum Register16 BC_DE_HL_AF[4] = {REG_BC, REG_DE, REG_HL, REG_AF};
 
-#if 0
+#if 1
 
 static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
     for (uint16 i = 0; i < gb->callStackHeight; i++) {
@@ -819,10 +819,6 @@ INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
     doTestBit(gb, RD(REG(HL)), bitIndex);
 }
 
-uint8 setBit(uint8 value, uint8 index) {
-    return value | (1 << index);
-}
-
 INSTRUCTION_EXECUTE_FN(setBitReg) {
     enum Register8 reg = instr[0] % 8;
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
@@ -835,10 +831,6 @@ INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
 
     WR(REG(HL), setBit(RD(REG(HL)), bitIndex));
-}
-
-uint8 resetBit(uint8 value, uint8 index) {
-    return value & ~(1 << index);
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
@@ -894,15 +886,11 @@ INSTRUCTION_EXECUTE_FN(enableInterrupts) {
 INSTRUCTION_EXECUTE_FN(jumpImm16) {
     uint16 prevPC = REG(PC);
     REG(PC) = get16BitArgument(instr);
-
-    gbprintf(gb, "Jump 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(jumpHL) {
     uint16 prevPC = REG(PC);
     REG(PC) = REG(HL);
-    
-    gbprintf(gb, "Jump HL 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 enum Conditional {
@@ -933,14 +921,15 @@ INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
 
     if (checkCondition(gb, cond)) {
         jumpImm16(gb, instr);
+        gb->variableCycles = 16;
+    } else {
+        gb->variableCycles = 12;
     }
 }
 
 INSTRUCTION_EXECUTE_FN(relativeJump) {
-    // TODO(octave) : check and test this, possible off-by-one error ?
     uint16 prevPC = REG(PC);
     REG(PC) += getSigned8BitArgument(instr);
-    /* gbprintf(gb, "Relative jump 0x%04X -> 0x%04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
@@ -948,6 +937,10 @@ INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
 
     if (checkCondition(gb, cond)) {
         relativeJump(gb, instr);
+
+        gb->variableCycles = 12;
+    } else {
+        gb->variableCycles = 8;
     }
 }
 
@@ -957,7 +950,6 @@ INSTRUCTION_EXECUTE_FN(callImm16) {
     doPush(gb, REG(PC));
     REG(PC) = get16BitArgument(instr);
 
-    gbprintf(gb, "Call 0x%04X -> 0x%04X\n", prevPC, REG(PC));
     gb->callStackHeight++;
 }
 
@@ -966,6 +958,9 @@ INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
 
     if (checkCondition(gb, cond)) {
         callImm16(gb, instr);
+        gb->variableCycles = 24;
+    } else {
+        gb->variableCycles = 12;
     }
 }
 
@@ -974,7 +969,6 @@ INSTRUCTION_EXECUTE_FN(ret) {
     
     REG(PC) = doPop(gb);
 
-    gbprintf(gb, "Return 0x%04X -> 0x%04X\n", prevPC, REG(PC));
     gb->callStackHeight--;
 }
 
@@ -983,6 +977,9 @@ INSTRUCTION_EXECUTE_FN(conditionalRet) {
 
     if (checkCondition(gb, cond)) {
         ret(gb, instr);
+        gb->variableCycles = 20;
+    } else {
+        gb->variableCycles = 8;
     }
 }
 
@@ -997,7 +994,6 @@ INSTRUCTION_EXECUTE_FN(reset) {
 
     uint16 prevPC = REG(PC);
     REG(PC) = address;
-    printf("Reset 0x%04X -> 0x%04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(prefixCB) {
@@ -1298,7 +1294,7 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, VARIABLE_CYCLES, conditionalRet),
     INSTR(1, 16, ret),
     INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
-    INSTR(2, 4, prefixCB),
+    INSTR(2, 8, prefixCB),
     INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
     INSTR(3, 24, callImm16),
     INSTR(2, 8, adcImm8),
@@ -1363,6 +1359,7 @@ static InstructionHandler instructionHandlers[256] = {
 };
 
 void executeInstruction(GameBoy* gb) {
+    uint16 prevPC = REG(PC);
     uint8* instr = &gb->memory[REG(PC)];
     InstructionHandler* handler = &instructionHandlers[instr[0]];
 
@@ -1371,20 +1368,66 @@ void executeInstruction(GameBoy* gb) {
         exit(1);
     }
 
-    /* gbprintf(gb, "Executing %s @0x%04X\n", handler->name, REG(PC)); */
+    if (gb->tracing) {
+        printGameboyLogLine(stdout, gb);
+        printf("Executing %s at 0x%04X (", handler->name, prevPC);
+        for (uint8 i = 0; i < handler->length; i++) {
+            printf("%02X", instr[i]);
+
+            if (i + 1 < handler->length) {
+                printf(" ");
+            }
+        }
+        printf(")\n");
+
+        gb->tracing--;
+    }
 
     REG(PC) += handler->length;
 
+    gb->variableCycles = 0;
+    
     handler->execute(gb, instr);
+
+    uint8 duration;
+    if (handler->cycles != VARIABLE_CYCLES) {
+        ASSERT(!gb->variableCycles);
+        duration = handler->cycles;
+    } else {
+        ASSERT(gb->variableCycles);
+        duration = gb->variableCycles;
+    }
+
+    uint8 tac = MMR_REG(TAC);
+    if (getBit(tac, 2)) {
+        uint16 clockPeriods[] = {
+            0x400,
+            0x10,
+            0x40,
+            0x100,
+        };
+
+        uint16 clockPeriod = clockPeriods[tac & 0x3];
+        gb->clock += duration;
+
+        while (gb->clock >= clockPeriod) {
+            gb->clock -= clockPeriod;
+
+            MMR_REG(TIMA)++;
+            if (!MMR_REG(TIMA)) {
+                triggerInterrupt(gb, INT_TIMER);
+            }
+        }
+    }
 }
 
 void handleInterrupt(GameBoy* gb) {
     uint16 interruptAddresses[] = {
-        0x0040, // V-blank
-        0x0048, // LCDC Status
-        0x0050, // Timer overflow
-        0x0058, // Serial transfer
-        0x0060, // Hi-Lo of P10-P13
+        [INT_VBLANK] = 0x0040, // V-blank
+        [INT_LCDC] = 0x0048, // LCDC Status
+        [INT_TIMER] = 0x0050, // Timer overflow
+        [INT_SERIAL] = 0x0058, // Serial transfer
+        [INT_JOYPAD] = 0x0060, // Hi-Lo of P10-P13
     };
 
     uint8 enabledPendingInterrupts = RD(MMR_IF) & RD(MMR_IE);
@@ -1393,8 +1436,7 @@ void handleInterrupt(GameBoy* gb) {
     for (uint8 interruptIndex = 0;
          interruptIndex < ARRAY_COUNT(interruptAddresses);
          interruptIndex++) {
-        if (getBit(RD(MMR_IF), interruptIndex)) {
-            gbprintf(gb, "Handling interrupt %d\n", interruptIndex);
+        if (getBit(enabledPendingInterrupts, interruptIndex)) {
             gb->callStackHeight++;
             
             // disable interrupts
