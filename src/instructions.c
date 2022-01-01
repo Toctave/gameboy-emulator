@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#define WR(address, value) writeMemory(gb, address, value)
+#define RD(address) readMemory(gb, address)
+
 #define INSTRUCTION_EXECUTE_FN_NOSTATIC(name) \
     void name(GameBoy* gb, uint8* instr)
 #define INSTRUCTION_EXECUTE_FN(name) static INSTRUCTION_EXECUTE_FN_NOSTATIC(name)
@@ -42,6 +45,17 @@ static uint16 read16Bits(uint8* address) {
 static void write16Bits(uint8* address, uint16 value) {
     address[0] = value & 0xFF;
     address[1] = value >> 8;
+}
+
+static uint16 readMemory16(GameBoy* gb, uint16 address) {
+    uint8 lsb = readMemory(gb, address);
+    uint8 msb = readMemory(gb, address + 1);
+    return (msb << 8) | lsb;
+}
+
+static void writeMemory16(GameBoy* gb, uint16 address, uint16 value) {
+    writeMemory(gb, address, value & 0xFF);
+    writeMemory(gb, address + 1, value >> 8);
 }
 
 static uint16 get16BitArgument(uint8* instr) {
@@ -82,72 +96,72 @@ INSTRUCTION_EXECUTE_FN(loadImm8ToReg) {
 INSTRUCTION_EXECUTE_FN(loadAddrHLToReg) {
     enum Register8 dst = (instr[0] >> 3) & 0x7;
     
-    setReg8(gb, dst, MEM(REG(HL)));
+    setReg8(gb, dst, RD(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadRegToAddrHL) {
     enum Register8 src = instr[0] & 0x7;
     
-    MEM(REG(HL)) = getReg8(gb, src);
+    WR(REG(HL), getReg8(gb, src));
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm8ToAddrHL) {
-    MEM(REG(HL)) = instr[1];
+    WR(REG(HL), instr[1]);
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddrBCToA) {
-    setReg8(gb, REG_A, MEM(REG(BC)));
+    setReg8(gb, REG_A, RD(REG(BC)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddrDEToA) {
-    setReg8(gb, REG_A, MEM(REG(DE)));
+    setReg8(gb, REG_A, RD(REG(DE)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToAddrBC) {
-    MEM(REG(BC)) = getReg8(gb, REG_A);
+    WR(REG(BC), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToAddrDE) {
-    MEM(REG(DE)) = getReg8(gb, REG_A);
+    WR(REG(DE), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToAddr16) {
-    MEM(get16BitArgument(instr)) = getReg8(gb, REG_A);
+    WR(get16BitArgument(instr), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadIOPortImm8ToA) {
-    setReg8(gb, REG_A, MEM(0xFF00 + instr[1]));
+    setReg8(gb, REG_A, RD(0xFF00 + instr[1]));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToIOPortImm8) {
-    MEM(0xFF00 + instr[1]) = getReg8(gb, REG_A);
+    WR(0xFF00 + instr[1], getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadIOPortCToA) {
-    setReg8(gb, REG_A, MEM(0xFF00 + getReg8(gb, REG_C)));
+    setReg8(gb, REG_A, RD(0xFF00 + getReg8(gb, REG_C)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToIOPortC) {
-    MEM(0xFF00 + getReg8(gb, REG_C)) = getReg8(gb, REG_A);
+    WR(0xFF00 + getReg8(gb, REG_C), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAndIncrementAToAddrHL) {
-    MEM(REG(HL)) = getReg8(gb, REG_A);
+    WR(REG(HL), getReg8(gb, REG_A));
     REG(HL)++;
 }
 
 INSTRUCTION_EXECUTE_FN(loadAndIncrementAddrHLToA) {
-    setReg8(gb, REG_A, MEM(REG(HL)));
+    setReg8(gb, REG_A, RD(REG(HL)));
     REG(HL)++;
 }
 
 INSTRUCTION_EXECUTE_FN(loadAndDecrementAToAddrHL) {
-    MEM(REG(HL)) = getReg8(gb, REG_A);
+    WR(REG(HL), getReg8(gb, REG_A));
     REG(HL)--;
 }
 
 INSTRUCTION_EXECUTE_FN(loadAndDecrementAddrHLToA) {
-    setReg8(gb, REG_A, MEM(REG(HL)));
+    setReg8(gb, REG_A, RD(REG(HL)));
     REG(HL)--;
 }
 
@@ -158,25 +172,33 @@ INSTRUCTION_EXECUTE_FN(loadImm16ToReg) {
 }
 
 INSTRUCTION_EXECUTE_FN(loadSPToAddr16) {
-    write16Bits(&MEM(get16BitArgument(instr)), REG(SP));
+    writeMemory16(gb, get16BitArgument(instr), REG(SP));
 }
 
 INSTRUCTION_EXECUTE_FN(loadSPToHL) {
     REG(HL) = REG(SP);
 }
 
+static void pushValue(GameBoy* gb, uint16 value) {
+    REG(SP) -= 2;
+    writeMemory16(gb, REG(SP), value);
+}
+
+static uint16 popValue(GameBoy* gb) {
+    uint16 result = readMemory16(gb, REG(SP));
+    REG(SP) += 2;
+
+    return result;
+}
+
 INSTRUCTION_EXECUTE_FN(push) {
     enum Register16 src = BC_DE_HL_AF[(instr[0] - 0xC5) >> 4];
-    
-    REG(SP) = REG(SP) - 2;
-    write16Bits(&MEM(REG(SP)), gb->registers[src]);
+    pushValue(gb, gb->registers[src]);
 }
 
 INSTRUCTION_EXECUTE_FN(pop) {
     enum Register16 dst = BC_DE_HL_AF[(instr[0] - 0xC1) >> 4];
-
-    gb->registers[dst] = read16Bits(&MEM(REG(SP)));
-    REG(SP) = REG(SP) + 2;
+    gb->registers[dst] = popValue(gb);
 }
 
 INSTRUCTION_EXECUTE_FN(addReg) {
@@ -196,7 +218,7 @@ INSTRUCTION_EXECUTE_FN(addImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(addAddrHL) {
-    uint8 result = getReg8(gb, REG_A) + MEM(REG(HL));
+    uint8 result = getReg8(gb, REG_A) + RD(REG(HL));
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -217,7 +239,7 @@ INSTRUCTION_EXECUTE_FN(adcImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(adcAddrHL) {
-    uint8 result = getReg8(gb, REG_A) + MEM(REG(HL) + getFlag(gb, FLAG_C));
+    uint8 result = getReg8(gb, REG_A) + RD(REG(HL)) + getFlag(gb, FLAG_C);
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -238,7 +260,7 @@ INSTRUCTION_EXECUTE_FN(subImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(subAddrHL) {
-    uint8 result = getReg8(gb, REG_A) - MEM(REG(HL));
+    uint8 result = getReg8(gb, REG_A) - RD(REG(HL));
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -259,7 +281,7 @@ INSTRUCTION_EXECUTE_FN(sbcImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(sbcAddrHL) {
-    uint8 result = getReg8(gb, REG_A) - MEM(REG(HL)) - getFlag(gb, FLAG_C);
+    uint8 result = getReg8(gb, REG_A) - RD(REG(HL)) - getFlag(gb, FLAG_C);
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -280,7 +302,7 @@ INSTRUCTION_EXECUTE_FN(andImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(andAddrHL) {
-    uint8 result = getReg8(gb, REG_A) & MEM(REG(HL));
+    uint8 result = getReg8(gb, REG_A) & RD(REG(HL));
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -301,7 +323,7 @@ INSTRUCTION_EXECUTE_FN(xorImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(xorAddrHL) {
-    uint8 result = getReg8(gb, REG_A) ^ MEM(REG(HL));
+    uint8 result = getReg8(gb, REG_A) ^ RD(REG(HL));
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -322,7 +344,7 @@ INSTRUCTION_EXECUTE_FN(orImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(orAddrHL) {
-    uint8 result = getReg8(gb, REG_A) | MEM(REG(HL));
+    uint8 result = getReg8(gb, REG_A) | RD(REG(HL));
     setReg8(gb, REG_A, result);
     updateZeroFlag(gb, result);
 }
@@ -347,7 +369,7 @@ INSTRUCTION_EXECUTE_FN(compareImm8) {
 }
 
 INSTRUCTION_EXECUTE_FN(compareAddrHL) {
-    compareWithValue(gb, MEM(REG(HL)));
+    compareWithValue(gb, RD(REG(HL)));
 }
 
 
@@ -361,8 +383,8 @@ INSTRUCTION_EXECUTE_FN(incReg) {
 }
 
 INSTRUCTION_EXECUTE_FN(incAddrHL) {
-    MEM(REG(HL))++;
-    updateZeroFlag(gb, MEM(REG(HL)));
+    WR(REG(HL), RD(REG(HL)) + 1);
+    updateZeroFlag(gb, RD(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(decReg) {
@@ -375,8 +397,8 @@ INSTRUCTION_EXECUTE_FN(decReg) {
 }
 
 INSTRUCTION_EXECUTE_FN(decAddrHL) {
-    MEM(REG(HL))--;
-    updateZeroFlag(gb, MEM(REG(HL)));
+    WR(REG(HL), RD(REG(HL)) - 1);
+    updateZeroFlag(gb, RD(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(decimalAdjust) {
@@ -455,7 +477,7 @@ INSTRUCTION_EXECUTE_FN(rotateRegLeft) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLLeft) {
-    MEM(REG(HL)) = rotateLeft(MEM(REG(HL)));
+    WR(REG(HL), rotateLeft(RD(REG(HL))));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeftThroughCarry) {
@@ -475,7 +497,7 @@ INSTRUCTION_EXECUTE_FN(rotateRegRight) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateAddrHLRight) {
-    MEM(REG(HL)) = rotateRight(MEM(REG(HL)));
+    WR(REG(HL), rotateRight(RD(REG(HL))));
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRightThroughCarry) {
@@ -505,11 +527,11 @@ INSTRUCTION_EXECUTE_FN(shiftRegRightArithmetic) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLLeftArithmetic) {
-    MEM(REG(HL)) = MEM(REG(HL)) << 1;
+    WR(REG(HL), RD(REG(HL)) << 1);
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLRightArithmetic) {
-    MEM(REG(HL)) = shiftRightArithmetic(MEM(REG(HL)));
+    WR(REG(HL), shiftRightArithmetic(RD(REG(HL))));
 }
 
 uint8 swapNibbles(uint8 value) {
@@ -523,7 +545,7 @@ INSTRUCTION_EXECUTE_FN(swapNibblesReg) {
 }
 
 INSTRUCTION_EXECUTE_FN(swapNibblesAddrHL) {
-    MEM(REG(HL)) = swapNibbles(MEM(REG(HL)));
+    WR(REG(HL), swapNibbles(RD(REG(HL))));
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightLogical) {
@@ -533,7 +555,7 @@ INSTRUCTION_EXECUTE_FN(shiftRegRightLogical) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftAddrHLRightLogical) {
-    MEM(REG(HL)) = MEM(REG(HL)) >> 1;
+    WR(REG(HL), RD(REG(HL)) >> 1);
 }
 
 
@@ -550,7 +572,7 @@ INSTRUCTION_EXECUTE_FN(testBitReg) {
 
 INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0x40) >> 3;
-    uint8 bitValue = getBit(MEM(REG(HL)), bitIndex);
+    uint8 bitValue = getBit(RD(REG(HL)), bitIndex);
 
     setFlag(gb, FLAG_Z, bitValue);
     setFlag(gb, FLAG_N, 0);
@@ -572,7 +594,7 @@ INSTRUCTION_EXECUTE_FN(setBitReg) {
 INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
 
-    MEM(REG(HL)) = setBit(MEM(REG(HL)), bitIndex);
+    WR(REG(HL), setBit(RD(REG(HL)), bitIndex));
 }
 
 uint8 resetBit(uint8 value, uint8 index) {
@@ -590,7 +612,7 @@ INSTRUCTION_EXECUTE_FN(resetBitReg) {
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
     uint8 bitIndex = (instr[0] - 0xC0) >> 3;
 
-    MEM(REG(HL)) = resetBit(REG(HL), bitIndex);
+    WR(REG(HL), resetBit(RD(REG(HL)), bitIndex));
 }
 
 
@@ -687,9 +709,8 @@ INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
 
 INSTRUCTION_EXECUTE_FN(callImm16) {
     uint16 prevPC = REG(PC);
-    
-    REG(SP) -= 2;
-    write16Bits(&MEM(REG(SP)), REG(PC));
+
+    pushValue(gb, REG(PC));
     REG(PC) = get16BitArgument(instr);
 
     gbprintf(gb, "Call 0x%04X -> 0x%04X\n", prevPC, REG(PC));
@@ -707,8 +728,7 @@ INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
 INSTRUCTION_EXECUTE_FN(ret) {
     uint16 prevPC = REG(PC);
     
-    REG(PC) = read16Bits(&MEM(REG(SP)));
-    REG(SP) += 2;
+    REG(PC) = popValue(gb);
 
     gbprintf(gb, "Return 0x%04X -> 0x%04X\n", prevPC, REG(PC));
     gb->callStackHeight--;
@@ -729,8 +749,7 @@ INSTRUCTION_EXECUTE_FN(retAndEnableInterrupts) {
 
 INSTRUCTION_EXECUTE_FN(reset) {
     uint16 address = instr[0] - 0xC7;
-    REG(SP) -= 2;
-    write16Bits(&MEM(REG(SP)), REG(PC));
+    pushValue(gb, REG(PC));
 
     uint16 prevPC = REG(PC);
     REG(PC) = address;
@@ -1124,13 +1143,13 @@ void handleInterrupt(GameBoy* gb) {
         0x0060, // Hi-Lo of P10-P13
     };
 
-    uint8 enabledPendingInterrupts = MEM(MMR_IF) & MEM(MMR_IE);
+    uint8 enabledPendingInterrupts = RD(MMR_IF) & RD(MMR_IE);
     
     // find highest-priority, enabled interrupt that was triggered
     for (uint8 interruptIndex = 0;
          interruptIndex < ARRAY_COUNT(interruptAddresses);
          interruptIndex++) {
-        if (getBit(MEM(MMR_IF), interruptIndex)) {
+        if (getBit(RD(MMR_IF), interruptIndex)) {
             gbprintf(gb, "Handling interrupt %d\n", interruptIndex);
             gb->callStackHeight++;
             
@@ -1138,11 +1157,10 @@ void handleInterrupt(GameBoy* gb) {
             gb->ime = 0;
 
             // reset this interrupt's flag
-            MEM(MMR_IF) = resetBit(MEM(MMR_IF), interruptIndex);
+            WR(MMR_IF,  resetBit(RD(MMR_IF), interruptIndex));
         
             // push PC
-            REG(SP) = REG(SP) - 2;
-            write16Bits(&MEM(REG(SP)), REG(PC));
+            pushValue(gb, REG(PC));
 
             // jump to interrupt handler
             REG(PC) = interruptAddresses[interruptIndex];

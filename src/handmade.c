@@ -247,7 +247,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     drawBackground(gb);
 
     /* trigger V-blank interrupt */
-    MEM(MMR_IF) = setBit(MEM(MMR_IF), INT_VBLANK);
+    /* triggerInterrupt(gb, INT_VBLANK); */
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);

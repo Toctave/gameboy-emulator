@@ -22,26 +22,26 @@ void assembleTileLine(GameBoy* gb, uint8 palette, uint8* source, uint8* destinat
 }
 
 uint8* getBGWindowTile(GameBoy* gb, uint8 tileIndex) {
-    uint8 lcdc = MEM(MMR_LCDC);
+    uint8 lcdc = readMemory(gb, MMR_LCDC);
 
     if (getBit(lcdc, 4)) {
-        return &MEM(TILE_DATA_BLOCK0 + tileIndex * 16);
+        return &gb->memory[TILE_DATA_BLOCK0 + tileIndex * 16];
     } else {
         if (tileIndex < 128) {
-            return &MEM(TILE_DATA_BLOCK2 + tileIndex * 16);
+            return &gb->memory[TILE_DATA_BLOCK2 + tileIndex * 16];
         } else {
-            return &MEM(TILE_DATA_BLOCK1 + (tileIndex - 128) * 16);
+            return &gb->memory[TILE_DATA_BLOCK1 + (tileIndex - 128) * 16];
         }
     }
 }
 
 void drawBackground(GameBoy* gb) {
-    uint8 palette = MEM(MMR_BGP);
-    uint8 scx = MEM(MMR_SCX);
-    uint8 scy = MEM(MMR_SCY);
-    uint8 lcdc = MEM(MMR_LCDC);
+    uint8 palette = gb->memory[MMR_BGP];
+    uint8 scx = gb->memory[MMR_SCX];
+    uint8 scy = gb->memory[MMR_SCY];
+    uint8 lcdc = gb->memory[MMR_LCDC];
 
-    uint8* tileMap = getBit(lcdc, 3) ? &MEM(TILEMAP1) : &MEM(TILEMAP0);
+    uint8* tileMap = getBit(lcdc, 3) ? &gb->memory[TILEMAP1] : &gb->memory[TILEMAP0];
 
     uint8* currentTilePtr = tileMap;
     for (uint8 tileY = 0; tileY < 32; tileY++) {

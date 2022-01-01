@@ -5,6 +5,19 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+uint8 readMemory(GameBoy* gb, uint16 address) {
+    return gb->memory[address];
+}
+
+void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
+    gb->memory[address] = value;
+}
+
+void triggerInterrupt(GameBoy* gb, enum Interrupt interrupt) {
+    uint8 ifFlag = readMemory(gb, MMR_IF);
+    writeMemory(gb, MMR_IF, setBit(ifFlag, interrupt));
+}
+
 void vGBError(GameBoy* gb, const char* message, va_list args) {
     fprintf(stderr, "Error : ");
     vfprintf(stderr, message, args);

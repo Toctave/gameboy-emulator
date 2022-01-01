@@ -18,7 +18,7 @@ typedef struct GameBoy {
 } GameBoy;
 
 #define REG(name) gb->registers[REG_##name]
-#define MEM(addr) gb->memory[addr]
+/* #define MEM(addr) gb->memory[addr] */
 
 enum Register16 {
     REG_AF,
@@ -110,6 +110,11 @@ enum Interrupt {
     INT_SERIAL,
     INT_JOYPAD,
 };
+
+uint8 readMemory(GameBoy* gb, uint16 address);
+void writeMemory(GameBoy* gb, uint16 address, uint8 value);
+
+void triggerInterrupt(GameBoy* gb, enum Interrupt interrupt);
 
 uint8 getBit(uint8 byte, uint8 index);
 uint8 resetBit(uint8 value, uint8 index);
