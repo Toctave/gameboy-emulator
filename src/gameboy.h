@@ -18,19 +18,32 @@ enum JoypadButton {
     JP_DOWN,
 };
 
+typedef struct FIFOPixel {
+    uint8 colorIndex;
+} FIFOPixel;
+
 typedef struct GameBoy {
-    uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
-
-    uint8 joypad;
-
     uint16 registers[6];
-    uint8 ime;
     uint8 memory[1 << 16];
+
+    uint8 ime;
+    uint8 joypad;
 
     uint16 variableCycles;
     uint16 clock;
     bool32 halted;
+
+    // rendering
+    uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
+    FIFOPixel backgroundFifo[16];
+    uint8 backgroundFifoStart;
+    uint8 backgroundFifoEnd;
     
+    FIFOPixel spriteFifo[16];
+    uint8 spriteFifoStart;
+    uint8 spriteFifoEnd;
+    
+    // debugging
     uint16 callStackHeight;
     uint32 tracing;
 } GameBoy;
@@ -162,7 +175,9 @@ void printGameboyState(GameBoy* gb);
 void printGameboyLogLine(FILE* file, GameBoy* gb);
 
 bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize);
+
 void drawBackground(GameBoy* gb);
+void drawScreen(GameBoy* gb);
 
 void gbError(GameBoy* gb, const char* message, ...);
 

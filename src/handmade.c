@@ -263,12 +263,12 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
 #endif
 
     for (int i = 0; i < 8096; i++) {
+        /* gb->tracing = 1; */
         /* printGameboyLogLine(state->logfile, gb); */
         executeCycle(gb);
     }
 
-    drawBackground(gb);
-
+    drawScreen(gb);
     triggerInterrupt(gb, INT_VBLANK);
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
