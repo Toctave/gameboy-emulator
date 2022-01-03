@@ -103,6 +103,7 @@ internal GLuint createShaderProgramFromSources(MemoryArena* arena,
 
 typedef struct ProgramState {
     bool32 isInitialized;
+    bool32 paused;
     
     MemoryArena transientArena;
     MemoryArena permanentArena;
@@ -140,6 +141,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         }
         
         // Initialize GB
+        state->paused = false;
         initializeGameboy(gb);
         
         if (input->argc != 2) {
@@ -244,28 +246,31 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         state->isInitialized = true;
     }
 
-#if true
     for (uint32 eventIndex = 0; eventIndex < input->eventCount; eventIndex++) {
         InputEvent* event = &input->events[eventIndex];
 
         if (event->type == EVENT_KEY) {
-            if (event->key.pressFlag == PRESS
-                && event->key.index == KID_F5) {
-                platform.resetProgramMemory(memory);
-                return false;
+            if (event->key.pressFlag == PRESS) {
+                if (event->key.index == KID_F5) {
+                    platform.resetProgramMemory(memory);
+                    return false;
+                } else if (event->key.index == KID_SPACE) {
+                    state->paused = !state->paused;
+                }
             }
 
-            if (handleKey(gb, event->key.index, event->key.pressFlag)) {
+            if ((handleKey(gb, event->key.index, event->key.pressFlag))) {
                 triggerInterrupt(gb, INT_JOYPAD);
             }
         }
     }
-#endif
 
-    for (int i = 0; i < 8096; i++) {
-        /* gb->tracing = 1; */
-        /* printGameboyLogLine(state->logfile, gb); */
-        executeCycle(gb);
+    if (!state->paused) {
+        for (int i = 0; i < 8096; i++) {
+            /* gb->tracing = 1; */
+            /* printGameboyLogLine(state->logfile, gb); */
+            executeCycle(gb);
+        }
     }
 
     drawScreen(gb);
