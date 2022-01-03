@@ -22,6 +22,12 @@ typedef struct FIFOPixel {
     uint8 colorIndex;
 } FIFOPixel;
 
+typedef struct PixelFIFO {
+    FIFOPixel pixels[16];
+    uint8 start;
+    uint8 end;
+} PixelFIFO;
+
 typedef struct GameBoy {
     uint16 registers[6];
     uint8 memory[1 << 16];
@@ -35,13 +41,8 @@ typedef struct GameBoy {
 
     // rendering
     uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
-    FIFOPixel backgroundFifo[16];
-    uint8 backgroundFifoStart;
-    uint8 backgroundFifoEnd;
-    
-    FIFOPixel spriteFifo[16];
-    uint8 spriteFifoStart;
-    uint8 spriteFifoEnd;
+    PixelFIFO backgroundFifo;
+    PixelFIFO spriteFifo;
     
     // debugging
     uint16 callStackHeight;
@@ -131,6 +132,9 @@ enum SpecialAddress {
 
     TILEMAP0 = 0x9800,
     TILEMAP1 = 0x9C00,
+
+    SPRITE_TILES_TABLE = 0x8000,
+    SPRITE_ATTRIBUTE_TABLE = 0xFE00,
 };
 
 enum Interrupt {

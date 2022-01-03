@@ -74,9 +74,9 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     if (address == MMR_P1) {
         uint8 reg = gb->memory[address];
 
-        if (reg & 0x20) { // Button keys
+        if (!(reg & 0x20)) { // Button keys
             return (gb->joypad & 0xF) | (reg & 0xF0);
-        } else if (reg & 0x10) { // Direction keys
+        } else if (!(reg & 0x10)) { // Direction keys
             return (gb->joypad >> 4) | (reg & 0xF0);
         } else {
             return 0x0F | (reg & 0xF0);
@@ -89,8 +89,21 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
 void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
     if (address < 0x8000) {
         gbprintf(gb, "Attempt to write to ROM at 0x%04X\n", address);
+        return;
     }
     
+    if (address == MMR_DMA) {
+        uint16 source = value << 8;
+        uint16 destination = SPRITE_ATTRIBUTE_TABLE;
+
+        while (destination < SPRITE_ATTRIBUTE_TABLE + 0x10) {
+            uint8 byte = readMemory(gb, source++);
+            writeMemory(gb, destination++, byte);
+        }
+        
+        return;
+    }
+
     gb->memory[address] = value;
 
     if (address == MMR_SC && value == 0x81) {

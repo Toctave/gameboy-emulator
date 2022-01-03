@@ -14,11 +14,63 @@ uint8 getPaletteColor(uint8 palette, uint8 id) {
     return color;
 }
 
+void fetchSpritePixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
+    // TODO(octave) : 10 sprites per scan line limitation
+    uint8 lyInSprite = ly + 16;
+    uint8 lxInSprite = lx + 8;
+
+    uint8 lcdc = MMR_REG(LCDC);
+    uint8 spriteHeight = getBit(lcdc, 2) ? 16 : 8;
+
+    uint8 wantedEnd = gb->spriteFifo.end + 8;
+    
+    for (uint32 spriteIndex = 0; spriteIndex < 40; spriteIndex++) {
+        uint16 spriteAddr = SPRITE_ATTRIBUTE_TABLE + spriteIndex * 4;
+        
+        uint8 spriteY =   readMemory(gb, spriteAddr);
+        uint8 spriteX =   readMemory(gb, spriteAddr + 1);
+        uint8 tileIndex = readMemory(gb, spriteAddr + 2);
+        uint8 flags =     readMemory(gb, spriteAddr + 3);
+
+        uint16 tileAddr = SPRITE_TILES_TABLE + tileIndex * 16;
+
+        uint8 palette = getBit(flags, 4) ?
+            readMemory(gb, MMR_OBP1) :
+            readMemory(gb, MMR_OBP0);
+
+        if (lyInSprite >= spriteY && lyInSprite < spriteY + spriteHeight
+            && lxInSprite >= spriteX && lxInSprite < spriteX + 8) {
+            
+            // TODO(octave) : factor this into function ?
+            uint8 tileDataLow = readMemory(gb, tileAddr + (lyInSprite - spriteY) * 2);
+            uint8 tileDataHigh = readMemory(gb, tileAddr + (lyInSprite - spriteY) * 2 + 1);
+
+            // push up to 8 pixels to sprite fifo
+            ASSERT((gb->spriteFifo.end == 0 && gb->spriteFifo.start == 0)
+                   || gb->spriteFifo.end == 8);
+            
+            for (uint8 pixel = 7; pixel < 8; pixel--) {
+                uint8 pixelColorIndex =
+                    (getBit(tileDataHigh, pixel) << 1) | getBit(tileDataLow, pixel);
+        
+                gb->spriteFifo.pixels[gb->spriteFifo.end++] =
+                    (FIFOPixel){pixelColorIndex};
+            }
+
+            break;
+        }
+    }
+
+    while (gb->spriteFifo.end < wantedEnd) {
+        gb->spriteFifo.pixels[gb->spriteFifo.end++] =
+            (FIFOPixel){0};
+    }
+}
+
 void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
     uint8 lcdc = MMR_REG(LCDC);
     uint8 wx = MMR_REG(WX);
     uint8 wy = MMR_REG(WY);
-    /* uint8 ly = MMR_REG(LY); */
 
     bool32 inWindow =
         lx >= wx
@@ -34,8 +86,6 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
         tilemapAddr = getBit(lcdc, 3) ? TILEMAP1 : TILEMAP0;
     }
 
-    /* printf("tilemapAddr = %04X\n", tilemapAddr); */
-
     // compute tile row coordinates
     uint8 tileX, rowY;
     if (inWindow) {
@@ -50,13 +100,9 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
         rowY = (ly + scy) & 0xFF;
     }
 
-    /* printf("tileX = %02X, rowY = %02X, offset = %02X\n", tileX, rowY, (rowY / 8) * 32 + tileX); */
-    
     // compute tile address
     uint8 tileIndex = readMemory(gb, tilemapAddr + (rowY / 8) * 32 + tileX);
 
-    /* printf("tileIndex = %02X\n", tileIndex); */
-    
     uint16 tileAddr;
     if (getBit(lcdc, 4)) {
         tileAddr = TILE_DATA_BLOCK0 + tileIndex * 16;
@@ -68,21 +114,17 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
         }
     }
 
-    // TODO(octave) : check vertical flip
     uint8 tileDataLow = readMemory(gb, tileAddr + (rowY % 8) * 2);
     uint8 tileDataHigh = readMemory(gb, tileAddr + (rowY % 8) * 2 + 1);
 
-    /* printf("Fetched %02X %02X\n", tileDataHigh, tileDataLow); */
-
     // push 8 pixels to background fifo
-    // TODO(octave) : check horizontal flip
-    ASSERT((gb->backgroundFifoEnd == 0 && gb->backgroundFifoStart == 0)
-           || gb->backgroundFifoEnd == 8);
+    ASSERT((gb->backgroundFifo.end == 0 && gb->backgroundFifo.start == 0)
+           || gb->backgroundFifo.end == 8);
     for (uint8 pixel = 7; pixel < 8; pixel--) {
         uint8 pixelColorIndex =
             (getBit(tileDataHigh, pixel) << 1) | getBit(tileDataLow, pixel);
         
-        gb->backgroundFifo[gb->backgroundFifoEnd++] =
+        gb->backgroundFifo.pixels[gb->backgroundFifo.end++] =
             (FIFOPixel){pixelColorIndex};
     }
 }
@@ -90,32 +132,53 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
 uint8 popPixelColor(GameBoy* gb) {
     uint8 palette = gb->memory[MMR_BGP];
 
-    ASSERT(gb->backgroundFifoStart < 8);
+    ASSERT(gb->backgroundFifo.start < 8 && gb->backgroundFifo.start < gb->backgroundFifo.end);
 
-    FIFOPixel backgroundPixel = gb->backgroundFifo[gb->backgroundFifoStart];
-    gb->backgroundFifoStart++;
+    FIFOPixel backgroundPixel = gb->backgroundFifo.pixels[gb->backgroundFifo.start];
+    gb->backgroundFifo.start++;
 
-    // TODO(octave) : mix with sprite pixel
+    FIFOPixel spritePixel = gb->spriteFifo.pixels[gb->spriteFifo.start];
+    gb->spriteFifo.start++;
 
-    return getPaletteColor(palette, backgroundPixel.colorIndex);
+    // TODO(octave) : proper mix
+    if (spritePixel.colorIndex) {
+        return getPaletteColor(palette, spritePixel.colorIndex);
+    } else {
+        return getPaletteColor(palette, backgroundPixel.colorIndex);
+    }
+
 }
 
 uint8 getNextPixel(GameBoy* gb, uint8 y, uint8 x) {
-    ASSERT(gb->backgroundFifoStart <= gb->backgroundFifoEnd);
+    ASSERT(gb->backgroundFifo.start <= gb->backgroundFifo.end);
     
-    // Fill up FIFO if necessary
-    if (gb->backgroundFifoStart >= 8) {
-        ASSERT(gb->backgroundFifoStart == 8);
-        ASSERT(gb->backgroundFifoEnd == 16);
+    // Fill up FIFOs if necessary
+    if (gb->backgroundFifo.start >= 8) {
+        ASSERT(gb->backgroundFifo.start == 8);
+        ASSERT(gb->backgroundFifo.end == 16);
 
         // shift fifo 8 spots to the left
         for (uint8 i = 0; i < 8; i++) {
-            gb->backgroundFifo[i] = gb->backgroundFifo[i+8];
+            gb->backgroundFifo.pixels[i] = gb->backgroundFifo.pixels[i+8];
         }
-        gb->backgroundFifoEnd -= 8;
-        gb->backgroundFifoStart -= 8;
+        gb->backgroundFifo.end -= 8;
+        gb->backgroundFifo.start -= 8;
 
         fetchBackgroundPixelRow(gb, y, x + 8);
+    }
+
+    if (gb->spriteFifo.start >= 8) {
+        ASSERT(gb->spriteFifo.start == 8);
+        ASSERT(gb->spriteFifo.end == 16);
+
+        // shift fifo 8 spots to the left
+        for (uint8 i = 0; i < 8; i++) {
+            gb->spriteFifo.pixels[i] = gb->spriteFifo.pixels[i+8];
+        }
+        gb->spriteFifo.end -= 8;
+        gb->spriteFifo.start -= 8;
+
+        fetchSpritePixelRow(gb, y, x + 8);
     }
 
     return popPixelColor(gb);
@@ -123,13 +186,20 @@ uint8 getNextPixel(GameBoy* gb, uint8 y, uint8 x) {
 
 void drawScreen(GameBoy* gb) {
     for (uint8 y = 0; y < GAMEBOY_SCREEN_HEIGHT; y++) {
-        // clear fifo
-        gb->backgroundFifoStart = 0;
-        gb->backgroundFifoEnd = 0;
+        // clear FIFOs
+        gb->backgroundFifo.start = 0;
+        gb->backgroundFifo.end = 0;
+        
+        gb->spriteFifo.start = 0;
+        gb->spriteFifo.end = 0;
         
         // fetch first 2 tiles
         fetchBackgroundPixelRow(gb, y, 0);
         fetchBackgroundPixelRow(gb, y, 8);
+        
+        // fetch first 2 tiles
+        fetchSpritePixelRow(gb, y, 0);
+        fetchSpritePixelRow(gb, y, 8);
         
         // skip the first few pixels if scrolled
         for (uint8 i = 0; i < MMR_REG(SCX) % 8; i++) {

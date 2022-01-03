@@ -885,11 +885,13 @@ INSTRUCTION_EXECUTE_FN(enableInterrupts) {
 INSTRUCTION_EXECUTE_FN(jumpImm16) {
     uint16 prevPC = REG(PC);
     REG(PC) = get16BitArgument(instr);
+    gbprintf(gb, "jump %04X -> %04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(jumpHL) {
     uint16 prevPC = REG(PC);
     REG(PC) = REG(HL);
+    gbprintf(gb, "jump HL %04X -> %04X\n", prevPC, REG(PC));
 }
 
 enum Conditional {
@@ -929,6 +931,7 @@ INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
 INSTRUCTION_EXECUTE_FN(relativeJump) {
     uint16 prevPC = REG(PC);
     REG(PC) += getSigned8BitArgument(instr);
+    /* gbprintf(gb, "relative jump %04X -> %04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
@@ -950,6 +953,8 @@ INSTRUCTION_EXECUTE_FN(callImm16) {
     REG(PC) = get16BitArgument(instr);
 
     gb->callStackHeight++;
+
+    gbprintf(gb, "call %04X -> %04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
@@ -968,6 +973,7 @@ INSTRUCTION_EXECUTE_FN(ret) {
     
     REG(PC) = doPop(gb);
 
+    gbprintf(gb, "ret %04X -> %04X\n", prevPC, REG(PC));
     gb->callStackHeight--;
 }
 
@@ -993,6 +999,8 @@ INSTRUCTION_EXECUTE_FN(reset) {
 
     uint16 prevPC = REG(PC);
     REG(PC) = address;
+    
+    gbprintf(gb, "reset %04X -> %04X\n", prevPC, REG(PC));
 }
 
 INSTRUCTION_EXECUTE_FN(prefixCB) {
@@ -1436,8 +1444,12 @@ void handleInterrupt(GameBoy* gb) {
             // push PC
             doPush(gb, REG(PC));
 
+            uint16 prevPC = REG(PC);
+
             // jump to interrupt handler
             REG(PC) = interruptAddresses[interruptIndex];
+            
+            gbprintf(gb, "interrupt %04X -> %04X\n", prevPC, REG(PC));
             break;
         }
     }
