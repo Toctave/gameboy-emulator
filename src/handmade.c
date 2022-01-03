@@ -114,8 +114,6 @@ typedef struct ProgramState {
     uint32 texture;
 
     GameBoy gb;
-
-    FILE* logfile;
 } ProgramState;
 
 UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
@@ -126,20 +124,13 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     if (!gl.isInitialized) {
         gl = memory->gl;
         gl.Enable(GL_DEBUG_OUTPUT);
-        gl.DebugMessageCallback(openglDebugCallback, NULL);
+        /* gl.DebugMessageCallback(openglDebugCallback, NULL); */
     }
 
     ProgramState* state = memory->permanentStorage;
     GameBoy* gb = &state->gb;
 
     if (!state->isInitialized) {
-        // open log file
-        state->logfile = fopen("logs.txt", "w");
-        if (!state->logfile) {
-            fprintf(stderr, "Could not create log file.\n");
-            exit(1);
-        }
-        
         // Initialize GB
         state->paused = false;
         initializeGameboy(gb);
@@ -267,8 +258,6 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
 
     if (!state->paused) {
         for (int i = 0; i < 8096; i++) {
-            /* gb->tracing = 1; */
-            /* printGameboyLogLine(state->logfile, gb); */
             executeCycle(gb);
         }
     }

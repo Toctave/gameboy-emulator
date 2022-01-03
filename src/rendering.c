@@ -19,7 +19,7 @@ void fetchSpritePixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
     uint8 lyInSprite = ly + 16;
     uint8 lxInSprite = lx + 8;
 
-    uint8 lcdc = MMR_REG(LCDC);
+    uint8 lcdc = IO(LCDC);
     uint8 spriteHeight = getBit(lcdc, 2) ? 16 : 8;
 
     uint8 wantedEnd = gb->spriteFifo.end + 8;
@@ -35,8 +35,8 @@ void fetchSpritePixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
         uint16 tileAddr = SPRITE_TILES_TABLE + tileIndex * 16;
 
         uint8 palette = getBit(flags, 4) ?
-            readMemory(gb, MMR_OBP1) :
-            readMemory(gb, MMR_OBP0);
+            readMemory(gb, IO_OBP1) :
+            readMemory(gb, IO_OBP0);
 
         if (lyInSprite >= spriteY && lyInSprite < spriteY + spriteHeight
             && lxInSprite >= spriteX && lxInSprite < spriteX + 8) {
@@ -70,12 +70,13 @@ void fetchSpritePixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
 }
 
 void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
-    uint8 lcdc = MMR_REG(LCDC);
-    uint8 wx = MMR_REG(WX);
-    uint8 wy = MMR_REG(WY);
+    uint8 lcdc = IO(LCDC);
+    uint8 wx = IO(WX);
+    uint8 wy = IO(WY);
 
     bool32 inWindow =
-        lx >= wx
+        getBit(lcdc, 5)
+        && lx >= wx
         && ly >= wy;
 
     inWindow = false;
@@ -95,8 +96,8 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
         tileX = (lx - wx) / 8;
         rowY = (ly - wy);
     } else {
-        uint8 scx = MMR_REG(SCX);
-        uint8 scy = MMR_REG(SCY);
+        uint8 scx = IO(SCX);
+        uint8 scy = IO(SCY);
         
         tileX = (scx / 8 + lx / 8) & 0x1F;
         rowY = (ly + scy) & 0xFF;
@@ -132,7 +133,7 @@ void fetchBackgroundPixelRow(GameBoy* gb, uint8 ly, uint8 lx) {
 }
 
 uint8 popBackgroundPixelColor(GameBoy* gb) {
-    uint8 palette = gb->memory[MMR_BGP];
+    uint8 palette = IO(BGP);
 
     ASSERT(gb->backgroundFifo.start < 8 && gb->backgroundFifo.start < gb->backgroundFifo.end);
 
@@ -142,6 +143,8 @@ uint8 popBackgroundPixelColor(GameBoy* gb) {
 }
 
 uint8 getNextBackgroundPixel(GameBoy* gb, uint8 y, uint8 x) {
+    uint8 lcdc = IO(LCDC);
+
     ASSERT(gb->backgroundFifo.start <= gb->backgroundFifo.end);
     
     // Fill up FIFOs if necessary
@@ -159,10 +162,19 @@ uint8 getNextBackgroundPixel(GameBoy* gb, uint8 y, uint8 x) {
         fetchBackgroundPixelRow(gb, y, x + 8);
     }
 
-    return popBackgroundPixelColor(gb);
+    uint8 popped = popBackgroundPixelColor(gb);
+    
+    if (getBit(lcdc, 0)) {
+        return popped;
+    } else {
+        return 0;
+    }
+
 }
 
-void drawScreenOld(GameBoy* gb) {
+#if 0
+
+void drawScreen(GameBoy* gb) {
     for (uint8 y = 0; y < GAMEBOY_SCREEN_HEIGHT; y++) {
         // clear FIFOs
         gb->backgroundFifo.start = 0;
@@ -180,7 +192,7 @@ void drawScreenOld(GameBoy* gb) {
         fetchSpritePixelRow(gb, y, 8);
         
         // skip the first few pixels if scrolled
-        for (uint8 i = 0; i < MMR_REG(SCX) % 8; i++) {
+        for (uint8 i = 0; i < IO(SCX) % 8; i++) {
             getNextBackgroundPixel(gb, y, 0);
         }
 
@@ -193,14 +205,20 @@ void drawScreenOld(GameBoy* gb) {
     }
 }
 
+#endif
+
 uint8 getSpriteColor(GameBoy* gb, uint8 ly, uint8 lx) {
     uint8 lyInSprite = ly + 16;
     uint8 lxInSprite = lx + 8;
 
-    uint8 lcdc = MMR_REG(LCDC);
+    uint8 lcdc = IO(LCDC);
     uint8 spriteHeight = getBit(lcdc, 2) ? 16 : 8;
 
-    for (uint32 spriteIndex = 0; spriteIndex < 40; spriteIndex++) {
+    uint8 colorIndex = 0;
+    uint8 minSpriteX = 255;
+    uint8 minSpriteIndex = 255;
+
+    for (uint8 spriteIndex = 0; spriteIndex < 40; spriteIndex++) {
         uint16 spriteAddr = SPRITE_ATTRIBUTE_TABLE + spriteIndex * 4;
         
         uint8 spriteY =   readMemory(gb, spriteAddr);
@@ -211,8 +229,8 @@ uint8 getSpriteColor(GameBoy* gb, uint8 ly, uint8 lx) {
         uint16 tileAddr = SPRITE_TILES_TABLE + tileIndex * 16;
 
         uint8 palette = getBit(flags, 4) ?
-            readMemory(gb, MMR_OBP1) :
-            readMemory(gb, MMR_OBP0);
+            readMemory(gb, IO_OBP1) :
+            readMemory(gb, IO_OBP0);
 
         uint8 dx = lxInSprite - spriteX;
         uint8 dy = lyInSprite - spriteY;
@@ -235,11 +253,17 @@ uint8 getSpriteColor(GameBoy* gb, uint8 ly, uint8 lx) {
             uint8 pixelColorIndex =
                 (getBit(tileDataHigh, 7 - dx) << 1) | getBit(tileDataLow, 7 - dx);
 
+            if (spriteX < minSpriteX ||
+                (spriteX == minSpriteX && spriteIndex < minSpriteIndex)) {
+                colorIndex = pixelColorIndex;
+                minSpriteX = spriteX;
+                minSpriteIndex = spriteIndex;
+            }
             return pixelColorIndex;
         }
     }
 
-    return 0;
+    return colorIndex;
 }
 
 void drawScreen(GameBoy* gb) {
@@ -253,7 +277,7 @@ void drawScreen(GameBoy* gb) {
         fetchBackgroundPixelRow(gb, y, 8);
         
         // skip the first few pixels if scrolled
-        for (uint8 i = 0; i < MMR_REG(SCX) % 8; i++) {
+        for (uint8 i = 0; i < IO(SCX) % 8; i++) {
             getNextBackgroundPixel(gb, y, 0);
         }
 

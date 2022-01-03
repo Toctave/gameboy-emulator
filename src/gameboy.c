@@ -65,63 +65,104 @@ void releaseButton(GameBoy* gb, enum JoypadButton button) {
 }
 
 uint8 readMemory(GameBoy* gb, uint16 address) {
-    /* TODO(octave) : remove this when properly rendering */
-    if (address == MMR_LY) {
-        return gb->memory[address]++;
-    }
-
-    switch (address) {
-    case MMR_P1: {
-        uint8 reg = gb->memory[address];
-
-        if (!(reg & 0x20)) { // Button keys
-            return (gb->joypad & 0xF) | (reg & 0xF0);
-        } else if (!(reg & 0x10)) { // Direction keys
-            return (gb->joypad >> 4) | (reg & 0xF0);
-        } else {
-            return 0x0F | (reg & 0xF0);
+    if (address == IE_ADDRESS) {
+        return gb->ie;
+    } else if (address >= HRAM_START) {
+        return gb->hram[address - HRAM_START];
+    } else if (address >= IO_PORTS_START) {
+        uint8 regIndex = address & 0xFF;
+        uint8 reg = gb->io[regIndex];
+        
+        switch (address) {
+        case IO_P1:
+            if (!(reg & 0x20)) { // Button keys
+                return (gb->joypad & 0xF) | (reg & 0xF0);
+            } else if (!(reg & 0x10)) { // Direction keys
+                return (gb->joypad >> 4) | (reg & 0xF0);
+            } else {
+                return 0x0F | (reg & 0xF0);
+            }
+            break;
+        case IO_LY:
+            /* TODO(octave) : remove this when properly rendering */
+            gb->io[regIndex]++;
+            return reg;
+        default:
+            return reg;
         }
+    } else if (address >= FORBIDDEN_REGION_START) {
+        gbError(gb, "Reading from invalid memory location 0x%04X (forbidden)\n", address);
+        return 0;
+    } else if (address >= OAM_START) {
+        return gb->oam[address - OAM_START];
+    } else if (address >= ECHO_RAM_START) {
+        gbError(gb, "Reading from invalid memory location 0x%04X (echo RAM)\n", address);
+        return 0;
+    } else if (address >= INTERNAL_RAM_START) {
+        return gb->ram[address - INTERNAL_RAM_START];
+    } else if (address >= EXTERNAL_RAM_START) {
+        gbError(gb, "Writing to invalid memory location 0x%04X (external RAM)\n", address);
+        return 0;
+    } else if (address >= VRAM_START) {
+        return gb->vram[address - VRAM_START];
+    } else if (address >= ROM_SWITCHABLE_BANK_START) {
+        // TODO(octave) : bank switching
+        return gb->rom[address];
+    } else {
+        return gb->rom[address];
     }
-        break;
-    }
-
-    return gb->memory[address];
 }
 
 void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
-    if (address < 0x8000) {
-        gbprintf(gb, "Attempt to write to ROM at 0x%04X\n", address);
-        return;
-    }
+    if (address == IE_ADDRESS) {
+        gb->ie = value;
+    } else if (address >= HRAM_START) {
+        gb->hram[address - HRAM_START] = value;
+    } else if (address >= IO_PORTS_START) {
+        switch (address) {
+        case IO_DMA: {
+            uint16 source = value << 8;
+            uint16 destination = SPRITE_ATTRIBUTE_TABLE;
 
-    switch (address) {
-    case MMR_DMA: {
-        uint16 source = value << 8;
-        uint16 destination = SPRITE_ATTRIBUTE_TABLE;
-
-        while (destination < SPRITE_ATTRIBUTE_TABLE + 0xA0) {
-            uint8 byte = readMemory(gb, source++);
-            writeMemory(gb, destination++, byte);
+            while (destination < SPRITE_ATTRIBUTE_TABLE + 0xA0) {
+                uint8 byte = readMemory(gb, source++);
+                writeMemory(gb, destination++, byte);
+            }
+            return;
         }
-        return;
-    }
-    case MMR_SC:
-        if (value == 0x81) {
-            printf("%c", gb->memory[MMR_SB]);
+        case IO_SC:
+            if (value == 0x81) {
+                printf("%c", IO(SB));
+            }
+            break;
+        case IO_DIV:
+            IO(DIV) = 0;
+            return;
+        default:
+            gb->io[address & 0xFF] = value;
         }
-        break;
-    case MMR_DIV:
-        MMR_REG(DIV) = 0;
-        return;
+    } else if (address >= FORBIDDEN_REGION_START) {
+        gbprintf(gb, "Writing to invalid memory location 0x%04X (forbidden)\n", address);
+    } else if (address >= OAM_START) {
+        gb->oam[address - OAM_START] = value;
+    } else if (address >= ECHO_RAM_START) {
+        gbError(gb, "Writing to invalid memory location 0x%04X (echo RAM)\n", address);
+    } else if (address >= INTERNAL_RAM_START) {
+        gb->ram[address - INTERNAL_RAM_START] = value;
+    } else if (address >= EXTERNAL_RAM_START) {
+        gbError(gb, "Writing to invalid memory location 0x%04X (external RAM)\n", address);
+    } else if (address >= VRAM_START) {
+        gb->vram[address - VRAM_START] = value;
+    } else if (address >= ROM_SWITCHABLE_BANK_START) {
+        gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 1+)\n", address);
+    } else {
+        gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 0)\n", address);
     }
-
-    gb->memory[address] = value;
-
 }
 
 void triggerInterrupt(GameBoy* gb, enum Interrupt interrupt) {
-    uint8 ifFlag = readMemory(gb, MMR_IF);
-    writeMemory(gb, MMR_IF, setBit(ifFlag, interrupt));
+    uint8 ifFlag = readMemory(gb, IO_IF);
+    writeMemory(gb, IO_IF, setBit(ifFlag, interrupt));
 }
 
 void vGBError(GameBoy* gb, const char* message, va_list args) {
@@ -311,7 +352,7 @@ bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize) {
                 filename, fsize, expectedSize);
     }
 
-    success = platform.readFileIntoMemory(filename, gb->memory, expectedSize);
+    success = platform.readFileIntoMemory(filename, gb->rom, expectedSize);
 
     return success;
 }
@@ -326,44 +367,45 @@ void initializeGameboy(GameBoy* gb) {
     REG(PC) = 0x0100;
     REG(SP) = 0xFFFE;
 
-    MMR_REG(P1) = 0xCF;
-    MMR_REG(SB) = 0x00;
-    MMR_REG(SC) = 0x7E;
-    MMR_REG(DIV) = 0x18;
-    MMR_REG(TIMA) = 0x00;
-    MMR_REG(TMA) = 0x00;
-    MMR_REG(TAC) = 0xF8;
-    MMR_REG(IF) = 0xE1;
-    MMR_REG(NR10) = 0x80;
-    MMR_REG(NR11) = 0xBF;
-    MMR_REG(NR12) = 0xF3;
-    MMR_REG(NR13) = 0xFF;
-    MMR_REG(NR14) = 0xBF;
-    MMR_REG(NR21) = 0x3F;
-    MMR_REG(NR22) = 0x00;
-    MMR_REG(NR23) = 0xFF;
-    MMR_REG(NR24) = 0xBF;
-    MMR_REG(NR30) = 0x7F;
-    MMR_REG(NR31) = 0xFF;
-    MMR_REG(NR32) = 0x9F;
-    MMR_REG(NR33) = 0xFF;
-    MMR_REG(NR34) = 0xBF;
-    MMR_REG(NR41) = 0xFF;
-    MMR_REG(NR42) = 0x00;
-    MMR_REG(NR43) = 0x00;
-    MMR_REG(NR44) = 0xBF;
-    MMR_REG(NR50) = 0x77;
-    MMR_REG(NR51) = 0xF3;
-    MMR_REG(NR52) = 0xF1;
-    MMR_REG(LCDC) = 0x91;
-    MMR_REG(STAT) = 0x81;
-    MMR_REG(SCY) = 0x00;
-    MMR_REG(SCX) = 0x00;
-    MMR_REG(LY) = 0x91;
-    MMR_REG(LYC) = 0x00;
-    MMR_REG(DMA) = 0xFF;
-    MMR_REG(BGP) = 0xFC;
-    MMR_REG(WY) = 0x00;
-    MMR_REG(WX) = 0x00;
-    MMR_REG(IE) = 0x00;
+    IO(P1) = 0xCF;
+    IO(SB) = 0x00;
+    IO(SC) = 0x7E;
+    IO(DIV) = 0x18;
+    IO(TIMA) = 0x00;
+    IO(TMA) = 0x00;
+    IO(TAC) = 0xF8;
+    IO(IF) = 0xE1;
+    IO(NR10) = 0x80;
+    IO(NR11) = 0xBF;
+    IO(NR12) = 0xF3;
+    IO(NR13) = 0xFF;
+    IO(NR14) = 0xBF;
+    IO(NR21) = 0x3F;
+    IO(NR22) = 0x00;
+    IO(NR23) = 0xFF;
+    IO(NR24) = 0xBF;
+    IO(NR30) = 0x7F;
+    IO(NR31) = 0xFF;
+    IO(NR32) = 0x9F;
+    IO(NR33) = 0xFF;
+    IO(NR34) = 0xBF;
+    IO(NR41) = 0xFF;
+    IO(NR42) = 0x00;
+    IO(NR43) = 0x00;
+    IO(NR44) = 0xBF;
+    IO(NR50) = 0x77;
+    IO(NR51) = 0xF3;
+    IO(NR52) = 0xF1;
+    IO(LCDC) = 0x91;
+    IO(STAT) = 0x81;
+    IO(SCY) = 0x00;
+    IO(SCX) = 0x00;
+    IO(LY) = 0x91;
+    IO(LYC) = 0x00;
+    IO(DMA) = 0xFF;
+    IO(BGP) = 0xFC;
+    IO(WY) = 0x00;
+    IO(WX) = 0x00;
+
+    gb->ie = 0x00;
 }

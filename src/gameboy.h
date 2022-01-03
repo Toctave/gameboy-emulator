@@ -29,12 +29,21 @@ typedef struct PixelFIFO {
 } PixelFIFO;
 
 typedef struct GameBoy {
+    // memory
     uint16 registers[6];
-    uint8 memory[1 << 16];
+    uint8 rom[1024 * 1024]; // Max 8Mb = 1MB total rom
+    uint8 ram[8 * 1024]; // 8KB base RAM
+    uint8 vram[8 * 1024]; // 8KB video RAM
+    uint8 oam[160];
+    uint8 io[128];
+    uint8 hram[256];
 
+    // TODO(octave) : cartridge RAM    
+    uint8 ie;
     uint8 ime;
     uint8 joypad;
 
+    // timing
     uint16 variableCycles;
     uint32 clock;
     uint16 timerAccumulator;
@@ -45,6 +54,7 @@ typedef struct GameBoy {
     uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
     PixelFIFO backgroundFifo;
     PixelFIFO spriteFifo;
+    bool32 showTiles;
     
     // debugging
     uint16 callStackHeight;
@@ -52,7 +62,6 @@ typedef struct GameBoy {
 } GameBoy;
 
 #define REG(name) gb->registers[REG_##name]
-#define MMR_REG(name) gb->memory[MMR_##name]
 
 enum Register16 {
     REG_AF,
@@ -74,50 +83,51 @@ enum Register8 {
     REG_A = 7,
 };
 
-enum MemoryMappedRegister {
-    MMR_P1 = 0xFF00,
-    MMR_SB = 0xFF01,
-    MMR_SC = 0xFF02,
-    MMR_DIV = 0xFF04,
-    MMR_TIMA = 0xFF05,
-    MMR_TMA = 0xFF06,
-    MMR_TAC = 0xFF07,
-    MMR_IF = 0xFF0F,
-    MMR_NR10 = 0xFF10,
-    MMR_NR11 = 0xFF11,
-    MMR_NR12 = 0xFF12,
-    MMR_NR13 = 0xFF13,
-    MMR_NR14 = 0xFF14,
-    MMR_NR21 = 0xFF16,
-    MMR_NR22 = 0xFF17,
-    MMR_NR23 = 0xFF18,
-    MMR_NR24 = 0xFF19,
-    MMR_NR30 = 0xFF1A,
-    MMR_NR31 = 0xFF1B,
-    MMR_NR32 = 0xFF1C,
-    MMR_NR33 = 0xFF1D,
-    MMR_NR34 = 0xFF1E,
-    MMR_NR41 = 0xFF20,
-    MMR_NR42 = 0xFF21,
-    MMR_NR43 = 0xFF22,
-    MMR_NR44 = 0xFF23,
-    MMR_NR50 = 0xFF24,
-    MMR_NR51 = 0xFF25,
-    MMR_NR52 = 0xFF26,
-    MMR_WAV  = 0xFF30,
-    MMR_LCDC = 0xFF40,
-    MMR_STAT = 0xFF41,
-    MMR_SCY = 0xFF42,
-    MMR_SCX = 0xFF43,
-    MMR_LY  = 0xFF44,
-    MMR_LYC = 0xFF45,
-    MMR_DMA = 0xFF46,
-    MMR_BGP = 0xFF47,
-    MMR_OBP0 = 0xFF48,
-    MMR_OBP1 = 0xFF49,
-    MMR_WY  = 0xFF4A,
-    MMR_WX  = 0xFF4B,
-    MMR_IE = 0xFFFF,
+#define IO(name) gb->io[IO_##name & 0xFF]
+
+enum IORegister {
+    IO_P1 = 0xFF00,
+    IO_SB = 0xFF01,
+    IO_SC = 0xFF02,
+    IO_DIV = 0xFF04,
+    IO_TIMA = 0xFF05,
+    IO_TMA = 0xFF06,
+    IO_TAC = 0xFF07,
+    IO_IF = 0xFF0F,
+    IO_NR10 = 0xFF10,
+    IO_NR11 = 0xFF11,
+    IO_NR12 = 0xFF12,
+    IO_NR13 = 0xFF13,
+    IO_NR14 = 0xFF14,
+    IO_NR21 = 0xFF16,
+    IO_NR22 = 0xFF17,
+    IO_NR23 = 0xFF18,
+    IO_NR24 = 0xFF19,
+    IO_NR30 = 0xFF1A,
+    IO_NR31 = 0xFF1B,
+    IO_NR32 = 0xFF1C,
+    IO_NR33 = 0xFF1D,
+    IO_NR34 = 0xFF1E,
+    IO_NR41 = 0xFF20,
+    IO_NR42 = 0xFF21,
+    IO_NR43 = 0xFF22,
+    IO_NR44 = 0xFF23,
+    IO_NR50 = 0xFF24,
+    IO_NR51 = 0xFF25,
+    IO_NR52 = 0xFF26,
+    IO_WAV  = 0xFF30,
+    IO_LCDC = 0xFF40,
+    IO_STAT = 0xFF41,
+    IO_SCY = 0xFF42,
+    IO_SCX = 0xFF43,
+    IO_LY  = 0xFF44,
+    IO_LYC = 0xFF45,
+    IO_DMA = 0xFF46,
+    IO_BGP = 0xFF47,
+    IO_OBP0 = 0xFF48,
+    IO_OBP1 = 0xFF49,
+    IO_WY  = 0xFF4A,
+    IO_WX  = 0xFF4B,
 };
 
 enum CPUFlag {
@@ -128,6 +138,17 @@ enum CPUFlag {
 };
 
 enum SpecialAddress {
+    ROM_SWITCHABLE_BANK_START = 0x4000,
+    VRAM_START = 0x8000,
+    EXTERNAL_RAM_START = 0xA000,
+    INTERNAL_RAM_START = 0xC000,
+    ECHO_RAM_START = 0xE000,
+    OAM_START = 0xFE00,
+    FORBIDDEN_REGION_START = 0xFEA0,
+    IO_PORTS_START = 0xFF00,
+    HRAM_START = 0xFF80,
+    IE_ADDRESS = 0xFFFF,
+    
     TILE_DATA_BLOCK0 = 0x8000,
     TILE_DATA_BLOCK1 = 0x8800,
     TILE_DATA_BLOCK2 = 0x9000,

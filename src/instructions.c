@@ -1367,7 +1367,11 @@ static InstructionHandler instructionHandlers[256] = {
 
 uint8 executeInstruction(GameBoy* gb) {
     uint16 prevPC = REG(PC);
-    uint8* instr = &gb->memory[REG(PC)];
+    uint8 instr[4];
+    for (uint8 i = 0; i < 4; i++) {
+        instr[i] = RD(REG(PC) + i);
+    }
+    
     InstructionHandler* handler = &instructionHandlers[instr[0]];
 
     if (!handler->execute) {
@@ -1377,15 +1381,16 @@ uint8 executeInstruction(GameBoy* gb) {
 
     if (gb->tracing) {
         printGameboyLogLine(stdout, gb);
-        printf("Executing %s at 0x%04X (", handler->name, prevPC);
-        for (uint8 i = 0; i < handler->length; i++) {
-            printf("%02X", instr[i]);
+        
+        /* printf("Executing %s at 0x%04X (", handler->name, prevPC); */
+        /* for (uint8 i = 0; i < handler->length; i++) { */
+        /*     printf("%02X", instr[i]); */
 
-            if (i + 1 < handler->length) {
-                printf(" ");
-            }
-        }
-        printf(")\n");
+        /*     if (i + 1 < handler->length) { */
+        /*         printf(" "); */
+        /*     } */
+        /* } */
+        /* printf(")\n"); */
 
         gb->tracing--;
     }
@@ -1417,7 +1422,7 @@ void handleInterrupt(GameBoy* gb) {
         [INT_JOYPAD] = 0x0060, // Hi-Lo of P10-P13
     };
 
-    uint8 ifReg = RD(MMR_IF);
+    uint8 ifReg = RD(IO_IF);
     if (ifReg) {
         gb->halted = false;
     }
@@ -1426,8 +1431,8 @@ void handleInterrupt(GameBoy* gb) {
         return;
     }
 
-    uint8 enabledPendingInterrupts = ifReg & RD(MMR_IE);
-    
+    uint8 enabledPendingInterrupts = ifReg & RD(IE_ADDRESS);
+
     // find highest-priority, enabled interrupt that was triggered
     for (uint8 interruptIndex = 0;
          interruptIndex < ARRAY_COUNT(interruptAddresses);
@@ -1439,7 +1444,7 @@ void handleInterrupt(GameBoy* gb) {
             gb->ime = 0;
 
             // reset this interrupt's flag
-            WR(MMR_IF,  resetBit(RD(MMR_IF), interruptIndex));
+            WR(IO_IF,  resetBit(RD(IO_IF), interruptIndex));
         
             // push PC
             doPush(gb, REG(PC));
@@ -1448,7 +1453,7 @@ void handleInterrupt(GameBoy* gb) {
 
             // jump to interrupt handler
             REG(PC) = interruptAddresses[interruptIndex];
-            
+
             gbprintf(gb, "interrupt %04X -> %04X\n", prevPC, REG(PC));
             break;
         }
@@ -1458,7 +1463,7 @@ void handleInterrupt(GameBoy* gb) {
 static void stepClock(GameBoy* gb, uint8 duration) {
     gb->clock += duration;
     
-    uint8 tac = MMR_REG(TAC);
+    uint8 tac = IO(TAC);
     if (getBit(tac, 2)) {
         uint16 clockPeriods[] = {
             0x400,
@@ -1473,8 +1478,8 @@ static void stepClock(GameBoy* gb, uint8 duration) {
         while (gb->timerAccumulator >= clockPeriod) {
             gb->timerAccumulator -= clockPeriod;
 
-            MMR_REG(TIMA)++;
-            if (!MMR_REG(TIMA)) {
+            IO(TIMA)++;
+            if (!IO(TIMA)) {
                 triggerInterrupt(gb, INT_TIMER);
             }
         }
@@ -1490,7 +1495,7 @@ void executeCycle(GameBoy* gb) {
     }
 
     stepClock(gb, duration);
-    MMR_REG(DIV) = gb->clock / 16384;
+    IO(DIV) = gb->clock / 16384;
     
     handleInterrupt(gb);
 }
