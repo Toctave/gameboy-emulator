@@ -66,12 +66,12 @@ void releaseButton(GameBoy* gb, enum JoypadButton button) {
 
 uint8 readMemory(GameBoy* gb, uint16 address) {
     /* TODO(octave) : remove this when properly rendering */
-    static uint8 currentLy = 0;
     if (address == MMR_LY) {
-        return currentLy++;
+        return gb->memory[address]++;
     }
 
-    if (address == MMR_P1) {
+    switch (address) {
+    case MMR_P1: {
         uint8 reg = gb->memory[address];
 
         if (!(reg & 0x20)) { // Button keys
@@ -82,6 +82,8 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
             return 0x0F | (reg & 0xF0);
         }
     }
+        break;
+    }
 
     return gb->memory[address];
 }
@@ -91,25 +93,30 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
         gbprintf(gb, "Attempt to write to ROM at 0x%04X\n", address);
         return;
     }
-    
-    if (address == MMR_DMA) {
+
+    switch (address) {
+    case MMR_DMA: {
         uint16 source = value << 8;
         uint16 destination = SPRITE_ATTRIBUTE_TABLE;
 
-        while (destination < SPRITE_ATTRIBUTE_TABLE + 0x10) {
+        while (destination < SPRITE_ATTRIBUTE_TABLE + 0xA0) {
             uint8 byte = readMemory(gb, source++);
             writeMemory(gb, destination++, byte);
         }
-        
+        return;
+    }
+    case MMR_SC:
+        if (value == 0x81) {
+            printf("%c", gb->memory[MMR_SB]);
+        }
+        break;
+    case MMR_DIV:
+        MMR_REG(DIV) = 0;
         return;
     }
 
     gb->memory[address] = value;
 
-    if (address == MMR_SC && value == 0x81) {
-        /* printf("Serial write : '%c' (0x%02X)\n", gb->memory[MMR_SB], gb->memory[MMR_SB]); */
-        printf("%c", gb->memory[MMR_SB]);
-    }
 }
 
 void triggerInterrupt(GameBoy* gb, enum Interrupt interrupt) {

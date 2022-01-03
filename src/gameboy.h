@@ -36,7 +36,9 @@ typedef struct GameBoy {
     uint8 joypad;
 
     uint16 variableCycles;
-    uint16 clock;
+    uint32 clock;
+    uint16 timerAccumulator;
+    
     bool32 halted;
 
     // rendering

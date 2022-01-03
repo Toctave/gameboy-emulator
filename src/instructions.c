@@ -20,7 +20,7 @@ typedef INSTRUCTION_EXECUTE_FN_NOSTATIC(InstructionExecuteFn);
 static enum Register16 BC_DE_HL_SP[4] = {REG_BC, REG_DE, REG_HL, REG_SP};
 static enum Register16 BC_DE_HL_AF[4] = {REG_BC, REG_DE, REG_HL, REG_AF};
 
-#if 1
+#if 0
 
 static void vgbprintf(GameBoy* gb, const char* message, va_list args) {
     for (uint16 i = 0; i < gb->callStackHeight; i++) {
@@ -1456,6 +1456,8 @@ void handleInterrupt(GameBoy* gb) {
 }
 
 static void stepClock(GameBoy* gb, uint8 duration) {
+    gb->clock += duration;
+    
     uint8 tac = MMR_REG(TAC);
     if (getBit(tac, 2)) {
         uint16 clockPeriods[] = {
@@ -1466,10 +1468,10 @@ static void stepClock(GameBoy* gb, uint8 duration) {
         };
 
         uint16 clockPeriod = clockPeriods[tac & 0x3];
-        gb->clock += duration;
+        gb->timerAccumulator += duration;
 
-        while (gb->clock >= clockPeriod) {
-            gb->clock -= clockPeriod;
+        while (gb->timerAccumulator >= clockPeriod) {
+            gb->timerAccumulator -= clockPeriod;
 
             MMR_REG(TIMA)++;
             if (!MMR_REG(TIMA)) {
@@ -1488,6 +1490,7 @@ void executeCycle(GameBoy* gb) {
     }
 
     stepClock(gb, duration);
+    MMR_REG(DIV) = gb->clock / 16384;
     
     handleInterrupt(gb);
 }
