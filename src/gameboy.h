@@ -31,17 +31,28 @@ typedef struct PixelFIFO {
 typedef struct GameBoy {
     // memory
     uint16 registers[6];
-    uint8 rom[1024 * 1024]; // Max 8Mb = 1MB total rom
+    uint8 rom[2 * 1024 * 1024]; // Max 16Mb = 2MB total rom
     uint8 ram[8 * 1024]; // 8KB base RAM
     uint8 vram[8 * 1024]; // 8KB video RAM
     uint8 oam[160];
     uint8 io[128];
     uint8 hram[256];
-
-    // TODO(octave) : cartridge RAM    
     uint8 ie;
     uint8 ime;
+
     uint8 joypad;
+
+    // Memory bank controller
+    struct {
+        uint8 ramEnable;
+        uint8 romBankIndex;
+        uint8 ramBankIndex;
+        uint8 bankingMode;
+        
+        uint16 romBankCount;
+        uint16 ramBankCount;
+    } mbc1;
+    // TODO(octave) : cartridge RAM
 
     // timing
     uint16 variableCycles;
@@ -158,6 +169,10 @@ enum SpecialAddress {
 
     SPRITE_TILES_TABLE = 0x8000,
     SPRITE_ATTRIBUTE_TABLE = 0xFE00,
+
+    CART_TYPE = 0x0147,
+    CART_ROM_SIZE = 0x0148,
+    CART_RAM_SIZE = 0x0149,
 };
 
 enum Interrupt {
@@ -166,6 +181,11 @@ enum Interrupt {
     INT_TIMER,
     INT_SERIAL,
     INT_JOYPAD,
+};
+
+enum CartridgeType {
+    CART_ROM_ONLY = 0x00,
+    CART_MBC1 = 0x01,
 };
 
 bool32 handleKey(GameBoy* gb, KeyIndex index, PressFlag pressFlag);
@@ -201,7 +221,7 @@ void gbprintf(GameBoy* gb, const char* message, ...);
 void printGameboyState(GameBoy* gb);
 void printGameboyLogLine(FILE* file, GameBoy* gb);
 
-bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize);
+bool32 loadRom(GameBoy* gb, const char* filename);
 
 void drawBackground(GameBoy* gb);
 void drawScreen(GameBoy* gb);

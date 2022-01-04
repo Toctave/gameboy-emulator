@@ -84,7 +84,7 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
             }
             break;
         case IO_LY:
-            /* TODO(octave) : remove this when properly rendering */
+            // TODO(octave) : remove this when properly rendering
             gb->io[regIndex]++;
             return reg;
         default:
@@ -101,13 +101,20 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     } else if (address >= INTERNAL_RAM_START) {
         return gb->ram[address - INTERNAL_RAM_START];
     } else if (address >= EXTERNAL_RAM_START) {
-        gbError(gb, "Writing to invalid memory location 0x%04X (external RAM)\n", address);
+        gbError(gb, "Reading from invalid memory location 0x%04X (external RAM)\n", address);
         return 0;
     } else if (address >= VRAM_START) {
         return gb->vram[address - VRAM_START];
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
-        // TODO(octave) : bank switching
-        return gb->rom[address];
+        if (gb->rom[CART_TYPE] == CART_MBC1) {
+            uint8 bankIndex = (gb->mbc1.ramBankIndex << 5) | gb->mbc1.romBankIndex;
+
+            ASSERT(bankIndex < gb->mbc1.romBankCount);
+            
+            return gb->rom[bankIndex * 0x4000 + address - ROM_SWITCHABLE_BANK_START];
+        } else {
+            gbError(gb, "Reading from invalid memory location 0x%04X (switchable ROM bank)\n", address);
+        }
     } else {
         return gb->rom[address];
     }
@@ -155,6 +162,21 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
         gb->vram[address - VRAM_START] = value;
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
         gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 1+)\n", address);
+
+        if (gb->rom[CART_TYPE] == CART_MBC1) {
+            if (address >= 0x6000) {
+                gb->mbc1.bankingMode = value & 0x01;
+            } else if (address >= 0x4000) {
+                gb->mbc1.ramBankIndex = value & 0x03;
+            } else if (address >= 0x2000) {
+                gb->mbc1.romBankIndex = value & 0x1F;
+                if (gb->mbc1.romBankIndex == 0) {
+                    gb->mbc1.romBankIndex = 1;
+                }
+            } else {
+                gb->mbc1.ramEnable = value & 0x01;
+            }
+        }
     } else {
         gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 0)\n", address);
     }
@@ -338,27 +360,54 @@ void printGameboyLogLine(FILE* file, GameBoy* gb) {
             readMemory(gb, pc + 3));
 }
 
-bool32 loadRom(GameBoy* gb, const char* filename, uint64 expectedSize) {
+bool32 loadRom(GameBoy* gb, const char* filename) {
     bool32 success;
     uint64 fsize = platform.getFileSize(filename, &success);
-    
+
     if (!success) {
         gbError(gb, "Failed to open file %s", filename);
         return false;
     }
 
-    if (fsize != expectedSize) {
-        gbError(gb, "File %s has wrong file size 0x%lX (expected 0x%lX)",
-                filename, fsize, expectedSize);
+    if (fsize > sizeof(gb->rom)) {
+        gbError(gb, "File %s is larger than maximum supported size %zu\n",
+                filename, sizeof(gb->rom));
+    }
+    success = platform.readFileIntoMemory(filename, gb->rom, fsize);
+
+    switch (gb->rom[CART_TYPE]) {
+    case CART_ROM_ONLY:
+        break;
+    case CART_MBC1:
+        break;
+    default:
+        fprintf(stderr, "Unknown cart type %02X\n", gb->rom[CART_TYPE]);
+        return false;
     }
 
-    success = platform.readFileIntoMemory(filename, gb->rom, expectedSize);
+    if (gb->rom[CART_ROM_SIZE] > 0x08) {
+        fprintf(stderr, "Unknown cart ROM size %02X\n", gb->rom[CART_ROM_SIZE]);
+        return false;
+    }
+    gb->mbc1.romBankCount = (2 << (gb->rom[CART_ROM_SIZE]));
 
+    if (gb->rom[CART_RAM_SIZE]) {
+        // TODO(octave)
+        fprintf(stderr, "Cartridge RAM not implemented\n");
+        return false;
+    }
+
+    printf("Loaded a rom of size %zu\n", fsize);
+    
     return success;
 }
 
 void initializeGameboy(GameBoy* gb) {
     gb->joypad = 0xFF;
+    gb->mbc1.ramEnable = 0;
+    gb->mbc1.romBankIndex = 1;
+    gb->mbc1.ramBankIndex = 0;
+    gb->mbc1.bankingMode = 0;
     
     REG(AF) = 0x01B0;
     REG(BC) = 0x0013;

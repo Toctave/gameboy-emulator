@@ -140,7 +140,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
             exit(1);
         }
         
-        if (!loadRom(gb, input->argv[1], 0x8000)) {
+        if (!loadRom(gb, input->argv[1])) {
             fprintf(stderr, "Failed to load ROM\n");
             return true;
         }

@@ -870,7 +870,7 @@ INSTRUCTION_EXECUTE_FN(halt) {
 
 INSTRUCTION_EXECUTE_FN(stop) {
     // TODO(octave)
-    NOT_IMPLEMENTED();
+    IO(DIV) = 0;
 }
 
 INSTRUCTION_EXECUTE_FN(disableInterrupts) {
@@ -1481,6 +1481,7 @@ static void stepClock(GameBoy* gb, uint8 duration) {
             IO(TIMA)++;
             if (!IO(TIMA)) {
                 triggerInterrupt(gb, INT_TIMER);
+                IO(TIMA) = IO(TMA);
             }
         }
     }
