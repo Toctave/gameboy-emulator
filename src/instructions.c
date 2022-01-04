@@ -1377,15 +1377,8 @@ uint8 executeInstruction(GameBoy* gb) {
     if (gb->tracing) {
         printGameboyLogLine(stdout, gb);
         
-        /* printf("Executing %s at 0x%04X (", handler->name, prevPC); */
-        /* for (uint8 i = 0; i < handler->length; i++) { */
-        /*     printf("%02X", instr[i]); */
-
-        /*     if (i + 1 < handler->length) { */
-        /*         printf(" "); */
-        /*     } */
-        /* } */
-        /* printf(")\n"); */
+        handler->disassemble(stdout, instr);
+        printf("\n");
 
         gb->tracing--;
     }
@@ -1395,9 +1388,6 @@ uint8 executeInstruction(GameBoy* gb) {
     gb->variableCycles = 0;
     
     handler->execute(gb, instr);
-    handler->disassemble(stdout, instr);
-    printf("\n");
-
     uint8 duration;
     if (handler->cycles != VARIABLE_CYCLES) {
         ASSERT(!gb->variableCycles);

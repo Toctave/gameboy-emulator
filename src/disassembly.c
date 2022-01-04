@@ -71,7 +71,7 @@ INSTRUCTION_DISASSEMBLE_FN(loadRegToReg) {
 INSTRUCTION_DISASSEMBLE_FN(loadImm8ToReg) {
     enum Register8 reg = (instr[0] - 6) >> 3;
 
-    fprintf(out, "ld %s, %02xh", reg8Name(reg), instr[1]);
+    fprintf(out, "ld %s, $%02X", reg8Name(reg), instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadAddrHLToReg) {
@@ -87,7 +87,7 @@ INSTRUCTION_DISASSEMBLE_FN(loadRegToAddrHL) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadImm8ToAddrHL) {
-    fprintf(out, "ld (HL), %02xh", instr[1]);
+    fprintf(out, "ld (HL), $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadAddrBCToA) {
@@ -107,19 +107,19 @@ INSTRUCTION_DISASSEMBLE_FN(loadAToAddrDE) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadAToAddr16) {
-    fprintf(out, "ld (%04xh), A", get16BitArgument(instr));
+    fprintf(out, "ld ($%04X), A", get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadAddr16ToA) {
-    fprintf(out, "ld A, (%04xh)", get16BitArgument(instr));
+    fprintf(out, "ld A, ($%04X)", get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadIOPortImm8ToA) {
-    fprintf(out, "ldh A, (%02xh)", instr[1]);
+    fprintf(out, "ldh A, ($%02X)", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadAToIOPortImm8) {
-    fprintf(out, "ldh (%02xh), A", instr[1]);
+    fprintf(out, "ldh ($%02X), A", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadIOPortCToA) {
@@ -149,11 +149,11 @@ INSTRUCTION_DISASSEMBLE_FN(loadAndDecrementAddrHLToA) {
 INSTRUCTION_DISASSEMBLE_FN(loadImm16ToReg) {
     enum Register16 dst = BC_DE_HL_SP[(instr[0] - 1) >> 4];
 
-    fprintf(out, "ld %s, %04xh", reg16Name(dst), get16BitArgument(instr));
+    fprintf(out, "ld %s, $%04X", reg16Name(dst), get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadSPToAddr16) {
-    fprintf(out, "ld (%04xh), SP", get16BitArgument(instr));
+    fprintf(out, "ld ($%04X), SP", get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadHLToSP) {
@@ -177,7 +177,7 @@ INSTRUCTION_DISASSEMBLE_FN(addReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(addImm8) {
-    fprintf(out, "add A, %02xh", instr[1]);
+    fprintf(out, "add A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(addAddrHL) {
@@ -191,7 +191,7 @@ INSTRUCTION_DISASSEMBLE_FN(adcReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(adcImm8) {
-    fprintf(out, "adc A, %02xh", instr[1]);
+    fprintf(out, "adc A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(adcAddrHL) {
@@ -205,7 +205,7 @@ INSTRUCTION_DISASSEMBLE_FN(subReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(subImm8) {
-    fprintf(out, "sub A, %02xh", instr[1]);
+    fprintf(out, "sub A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(subAddrHL) {
@@ -219,7 +219,7 @@ INSTRUCTION_DISASSEMBLE_FN(sbcReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(sbcImm8) {
-    fprintf(out, "sbc A, %02xh", instr[1]);
+    fprintf(out, "sbc A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(sbcAddrHL) {
@@ -233,7 +233,7 @@ INSTRUCTION_DISASSEMBLE_FN(andReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(andImm8) {
-    fprintf(out, "and A, %02xh", instr[1]);
+    fprintf(out, "and A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(andAddrHL) {
@@ -247,7 +247,7 @@ INSTRUCTION_DISASSEMBLE_FN(xorReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(xorImm8) {
-    fprintf(out, "xor A, %02xh", instr[1]);
+    fprintf(out, "xor A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(xorAddrHL) {
@@ -261,7 +261,7 @@ INSTRUCTION_DISASSEMBLE_FN(orReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(orImm8) {
-    fprintf(out, "or A, %02xh", instr[1]);
+    fprintf(out, "or A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(orAddrHL) {
@@ -275,7 +275,7 @@ INSTRUCTION_DISASSEMBLE_FN(compareReg) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(compareImm8) {
-    fprintf(out, "cp A, %02xh", instr[1]);
+    fprintf(out, "cp A, $%02X", instr[1]);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(compareAddrHL) {
@@ -326,12 +326,12 @@ INSTRUCTION_DISASSEMBLE_FN(decReg16) {
 
 INSTRUCTION_DISASSEMBLE_FN(addSignedToSP) {
     int16 rhs = getSigned8BitArgument(instr);
-    fprintf(out, "add SP, %02xh", rhs);
+    fprintf(out, "add SP, $%02X", rhs);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadSignedPlusSPToHL) {
     int16 rhs = getSigned8BitArgument(instr);
-    fprintf(out, "ld HL, SP + %02xh", rhs);
+    fprintf(out, "ld HL, SP + $%02X", rhs);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(rotateALeft) {
@@ -485,7 +485,7 @@ INSTRUCTION_DISASSEMBLE_FN(enableInterrupts) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(jumpImm16) {
-    fprintf(out, "jp %04xh", get16BitArgument(instr));
+    fprintf(out, "jp $%04X", get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(jumpHL) {
@@ -494,26 +494,26 @@ INSTRUCTION_DISASSEMBLE_FN(jumpHL) {
 
 INSTRUCTION_DISASSEMBLE_FN(conditionalJumpImm16) {
     enum Conditional cond = (instr[0] - 0xC2) >> 3;
-    fprintf(out, "jp %s, %04xh", conditionalName(cond), get16BitArgument(instr));
+    fprintf(out, "jp %s, $%04X", conditionalName(cond), get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(relativeJump) {
-    fprintf(out, "jr %02xh", getSigned8BitArgument(instr));
+    fprintf(out, "jr $%02X", getSigned8BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(conditionalRelativeJump) {
     enum Conditional cond = (instr[0] - 0x20) >> 3;
 
-    fprintf(out, "jp %s, %02xh", conditionalName(cond), getSigned8BitArgument(instr));
+    fprintf(out, "jp %s, $%02X", conditionalName(cond), getSigned8BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(callImm16) {
-    fprintf(out, "call %04xh", get16BitArgument(instr));
+    fprintf(out, "call $%04X", get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(conditionalCallImm16) {
     enum Conditional cond = (instr[0] - 0xC4) >> 3;
-    fprintf(out, "call %s, %04xh", conditionalName(cond), get16BitArgument(instr));
+    fprintf(out, "call %s, $%04X", conditionalName(cond), get16BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(ret) {

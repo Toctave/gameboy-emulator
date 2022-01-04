@@ -106,7 +106,9 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     } else if (address >= VRAM_START) {
         return gb->vram[address - VRAM_START];
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
-        if (gb->rom[CART_TYPE] == CART_MBC1) {
+        if (gb->rom[CART_TYPE] == CART_ROM_ONLY) {
+            return gb->rom[address];
+        } if (gb->rom[CART_TYPE] == CART_MBC1) {
             uint8 bankIndex = (gb->mbc1.ramBankIndex << 5) | gb->mbc1.romBankIndex;
             bankIndex = bankIndex % gb->mbc1.romBankCount;
             return gb->rom[bankIndex * 0x4000 + address - ROM_SWITCHABLE_BANK_START];
