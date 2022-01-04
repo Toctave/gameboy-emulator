@@ -108,9 +108,7 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
         if (gb->rom[CART_TYPE] == CART_MBC1) {
             uint8 bankIndex = (gb->mbc1.ramBankIndex << 5) | gb->mbc1.romBankIndex;
-
-            ASSERT(bankIndex < gb->mbc1.romBankCount);
-            
+            bankIndex = bankIndex % gb->mbc1.romBankCount;
             return gb->rom[bankIndex * 0x4000 + address - ROM_SWITCHABLE_BANK_START];
         } else {
             gbError(gb, "Reading from invalid memory location 0x%04X (switchable ROM bank)\n", address);
@@ -174,7 +172,7 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
                     gb->mbc1.romBankIndex = 1;
                 }
             } else {
-                gb->mbc1.ramEnable = value & 0x01;
+                gb->mbc1.ramEnable = (value & 0x0F) == 0x0A;
             }
         }
     } else {

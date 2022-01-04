@@ -183,10 +183,21 @@ enum Interrupt {
     INT_JOYPAD,
 };
 
+enum Conditional {
+    COND_NZ,
+    COND_Z,
+    COND_NC,
+    COND_C,
+};
+
 enum CartridgeType {
     CART_ROM_ONLY = 0x00,
     CART_MBC1 = 0x01,
 };
+
+uint16 get16BitArgument(uint8* instr);
+int8 getSigned8BitArgument(uint8* instr);
+
 
 bool32 handleKey(GameBoy* gb, KeyIndex index, PressFlag pressFlag);
 uint8 setBit(uint8 value, uint8 index);

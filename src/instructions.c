@@ -71,11 +71,11 @@ static void writeMemory16(GameBoy* gb, uint16 address, uint16 value) {
     writeMemory(gb, address + 1, value >> 8);
 }
 
-static uint16 get16BitArgument(uint8* instr) {
+uint16 get16BitArgument(uint8* instr) {
     return read16Bits(instr + 1);
 }
 
-static int8 getSigned8BitArgument(uint8* instr) {
+int8 getSigned8BitArgument(uint8* instr) {
     // TODO(octave) : bulletproof this.  For now, implementation
     // defined but works on x86 (and probably any 2's complement
     // machine?)
@@ -85,13 +85,6 @@ static int8 getSigned8BitArgument(uint8* instr) {
 static void updateZeroFlag(GameBoy* gb, uint8 result) {
     setFlag(gb, FLAG_Z, result == 0);
 }
-
-typedef struct InstructionHandler {
-    uint16 length;
-    uint16 cycles;
-    InstructionExecuteFn* execute;
-    const char* name;
-} InstructionHandler;
 
 INSTRUCTION_EXECUTE_FN(loadRegToReg) {
     enum Register8 src = instr[0] & 0x7;
@@ -894,13 +887,6 @@ INSTRUCTION_EXECUTE_FN(jumpHL) {
     gbprintf(gb, "jump HL %04X -> %04X\n", prevPC, REG(PC));
 }
 
-enum Conditional {
-    COND_NZ,
-    COND_Z,
-    COND_NC,
-    COND_C,
-};
-
 bool32 checkCondition(GameBoy* gb, enum Conditional cond) {
     switch (cond) {
     case COND_NZ:
@@ -1054,9 +1040,18 @@ INSTRUCTION_EXECUTE_FN(prefixCB) {
     }
 }
 
-#define VARIABLE_CYCLES 0xFFFF
+#include "disassembly.c"
 
-#define INSTR(length, cycles, handler) {length, cycles, handler, #handler}
+#define VARIABLE_CYCLES 0xFFFF
+#define INSTR(length, cycles, handler) {length, cycles, handler, handler##_disassemble, #handler}
+
+typedef struct InstructionHandler {
+    uint16 length;
+    uint16 cycles;
+    InstructionExecuteFn* execute;
+    InstructionDisassembleFn* disassemble;
+    const char* name;
+} InstructionHandler;
 
 // reference : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html
 static InstructionHandler instructionHandlers[256] = {
@@ -1400,6 +1395,8 @@ uint8 executeInstruction(GameBoy* gb) {
     gb->variableCycles = 0;
     
     handler->execute(gb, instr);
+    handler->disassemble(stdout, instr);
+    printf("\n");
 
     uint8 duration;
     if (handler->cycles != VARIABLE_CYCLES) {
