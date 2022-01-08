@@ -162,12 +162,12 @@ INSTRUCTION_DISASSEMBLE_FN(loadHLToSP) {
 
 INSTRUCTION_DISASSEMBLE_FN(push) {
     enum Register16 src = BC_DE_HL_AF[(instr[0] - 0xC5) >> 4];
-    fprintf(out, "push %s", reg8Name(src));
+    fprintf(out, "push %s", reg16Name(src));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(pop) {
     enum Register16 dst = BC_DE_HL_AF[(instr[0] - 0xC1) >> 4];
-    fprintf(out, "pop %s", reg8Name(dst));
+    fprintf(out, "pop %s", reg16Name(dst));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(addReg) {
@@ -325,13 +325,13 @@ INSTRUCTION_DISASSEMBLE_FN(decReg16) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(addSignedToSP) {
-    int16 rhs = getSigned8BitArgument(instr);
-    fprintf(out, "add SP, $%02X", rhs);
+    int8 rhs = getSigned8BitArgument(instr);
+    fprintf(out, "add SP, %d", rhs);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(loadSignedPlusSPToHL) {
-    int16 rhs = getSigned8BitArgument(instr);
-    fprintf(out, "ld HL, SP + $%02X", rhs);
+    int8 rhs = getSigned8BitArgument(instr);
+    fprintf(out, "ld HL, SP + %d", rhs);
 }
 
 INSTRUCTION_DISASSEMBLE_FN(rotateALeft) {
@@ -498,13 +498,13 @@ INSTRUCTION_DISASSEMBLE_FN(conditionalJumpImm16) {
 }
 
 INSTRUCTION_DISASSEMBLE_FN(relativeJump) {
-    fprintf(out, "jr $%02X", getSigned8BitArgument(instr));
+    fprintf(out, "jr %d", getSigned8BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(conditionalRelativeJump) {
     enum Conditional cond = (instr[0] - 0x20) >> 3;
 
-    fprintf(out, "jp %s, $%02X", conditionalName(cond), getSigned8BitArgument(instr));
+    fprintf(out, "jr %s, %d", conditionalName(cond), getSigned8BitArgument(instr));
 }
 
 INSTRUCTION_DISASSEMBLE_FN(callImm16) {
