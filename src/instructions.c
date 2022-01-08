@@ -994,6 +994,16 @@ INSTRUCTION_EXECUTE_FN(prefixCB) {
 
     bool32 isAddrHL = (instr[0] % 8) == 6;
 
+    if (isAddrHL) {
+        if (instr[0] >= 0x40 && instr[0] < 0x80) {
+            gb->variableCycles = 12;
+        } else {
+            gb->variableCycles = 16;
+        }
+    } else {
+        gb->variableCycles = 8;
+    }
+
     InstructionExecuteFn* dispatchTable[8];
 
     if (isAddrHL) {
@@ -1189,14 +1199,14 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, 4, loadRegToReg),
 
     // 70
-    INSTR(1, 4, loadRegToAddrHL),
-    INSTR(1, 4, loadRegToAddrHL),
-    INSTR(1, 4, loadRegToAddrHL),
-    INSTR(1, 4, loadRegToAddrHL),
-    INSTR(1, 4, loadRegToAddrHL),
-    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
     INSTR(1, 4, halt),
-    INSTR(1, 4, loadRegToAddrHL),
+    INSTR(1, 8, loadRegToAddrHL),
 
     INSTR(1, 4, loadRegToReg),
     INSTR(1, 4, loadRegToReg),
@@ -1296,7 +1306,7 @@ static InstructionHandler instructionHandlers[256] = {
     INSTR(1, VARIABLE_CYCLES, conditionalRet),
     INSTR(1, 16, ret),
     INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
-    INSTR(2, 8, prefixCB),
+    INSTR(2, VARIABLE_CYCLES, prefixCB),
     INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
     INSTR(3, 24, callImm16),
     INSTR(2, 8, adcImm8),
@@ -1472,6 +1482,19 @@ static void stepClock(GameBoy* gb, uint8 duration) {
                 IO(TIMA) = IO(TMA);
             }
         }
+    }
+
+    gb->renderingAccumulator += duration;
+    while (gb->renderingAccumulator > GAMEBOY_CYCLES_PER_SCANLINE) {
+        IO(LY)++;
+        if (IO(LY) == GAMEBOY_LY_VBLANK) {
+            triggerInterrupt(gb, INT_VBLANK);
+        } else if (IO(LY) == GAMEBOY_LY_MAX) {
+            IO(LY) = 0;
+            gb->frameReady = true;
+        }
+
+        gb->renderingAccumulator -= GAMEBOY_CYCLES_PER_SCANLINE;
     }
 }
 
