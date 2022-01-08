@@ -262,13 +262,14 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 
     if (!state->paused) {
-        for (int i = 0; i < 8096; i++) {
+        while (!gb->frameReady) {
             executeCycle(gb);
         }
+        gb->frameReady = false;
     }
 
     drawScreen(gb);
-    /* triggerInterrupt(gb, INT_VBLANK); */
+    triggerInterrupt(gb, INT_VBLANK);
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);

@@ -83,10 +83,6 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
                 return 0x0F | (reg & 0xF0);
             }
             break;
-        case IO_LY:
-            // TODO(octave) : remove this when properly rendering
-            gb->io[regIndex]++;
-            return reg;
         default:
             return reg;
         }
@@ -101,8 +97,8 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     } else if (address >= INTERNAL_RAM_START) {
         return gb->ram[address - INTERNAL_RAM_START];
     } else if (address >= EXTERNAL_RAM_START) {
-        gbError(gb, "Reading from invalid memory location 0x%04X (external RAM)\n", address);
-        return 0;
+        uint16 ramAddress = address - EXTERNAL_RAM_START;
+        return gb->externalRam[gb->mbc1.ramBankIndex * 0x2000 + ramAddress];
     } else if (address >= VRAM_START) {
         return gb->vram[address - VRAM_START];
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
@@ -157,7 +153,8 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
     } else if (address >= INTERNAL_RAM_START) {
         gb->ram[address - INTERNAL_RAM_START] = value;
     } else if (address >= EXTERNAL_RAM_START) {
-        gbError(gb, "Writing to invalid memory location 0x%04X (external RAM)\n", address);
+        uint16 ramAddress = address - EXTERNAL_RAM_START;
+        gb->externalRam[gb->mbc1.ramBankIndex * 0x2000 + ramAddress] = value;
     } else if (address >= VRAM_START) {
         gb->vram[address - VRAM_START] = value;
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
@@ -391,13 +388,31 @@ bool32 loadRom(GameBoy* gb, const char* filename) {
     }
     gb->mbc1.romBankCount = (2 << (gb->rom[CART_ROM_SIZE]));
 
-    if (gb->rom[CART_RAM_SIZE]) {
-        // TODO(octave)
-        fprintf(stderr, "Cartridge RAM not implemented\n");
+    switch (gb->rom[CART_RAM_SIZE]) {
+    case 0x00:
+        gb->mbc1.ramBankCount = 0;
+        break;
+    case 0x02:
+        gb->mbc1.ramBankCount = 1;
+        break;
+    case 0x03:
+        gb->mbc1.ramBankCount = 4;
+        break;
+    case 0x04:
+        gb->mbc1.ramBankCount = 16;
+        break;
+    case 0x05:
+        gb->mbc1.ramBankCount = 8;
+        break;
+    default:
+        fprintf(stderr, "Unknown cart RAM size %02X\n", gb->rom[CART_RAM_SIZE]);
         return false;
     }
 
-    printf("Loaded a rom of size %zu\n", fsize);
+    printf("Loaded a cartridge of size %zu, %u rom banks and %u ram banks\n",
+           fsize,
+           gb->mbc1.romBankCount,
+           gb->mbc1.ramBankCount);
     
     return success;
 }
@@ -457,4 +472,8 @@ void initializeGameboy(GameBoy* gb) {
     IO(WX) = 0x00;
 
     gb->ie = 0x00;
+    gb->clock = 0;
+    gb->timerAccumulator = 0;
+    gb->renderingAccumulator = 0;
+    gb->halted = false;
 }

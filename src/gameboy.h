@@ -3,6 +3,10 @@
 #define GAMEBOY_SCREEN_WIDTH 160
 #define GAMEBOY_SCREEN_HEIGHT 144
 #define GAMEBOY_CPU_FREQUENCY 4194304
+#define GAMEBOY_CYCLES_PER_SCANLINE 456
+#define GAMEBOY_LY_VBLANK 144
+#define GAMEBOY_LY_MAX 154
+
 
 #include <stdio.h>
 #include "handmade.h"
@@ -33,6 +37,7 @@ typedef struct GameBoy {
     uint16 registers[6];
     uint8 rom[2 * 1024 * 1024]; // Max 16Mb = 2MB total rom
     uint8 ram[8 * 1024]; // 8KB base RAM
+    uint8 externalRam[128 * 1024]; // up to 128KB cartridge RAM
     uint8 vram[8 * 1024]; // 8KB video RAM
     uint8 oam[160];
     uint8 io[128];
@@ -52,12 +57,12 @@ typedef struct GameBoy {
         uint16 romBankCount;
         uint16 ramBankCount;
     } mbc1;
-    // TODO(octave) : cartridge RAM
 
     // timing
     uint16 variableCycles;
     uint32 clock;
     uint16 timerAccumulator;
+    uint16 renderingAccumulator;
     
     bool32 halted;
 
@@ -65,7 +70,7 @@ typedef struct GameBoy {
     uint8 screen[GAMEBOY_SCREEN_HEIGHT][GAMEBOY_SCREEN_WIDTH];
     PixelFIFO backgroundFifo;
     PixelFIFO spriteFifo;
-    bool32 showTiles;
+    bool32 frameReady;
     
     // debugging
     uint16 callStackHeight;
