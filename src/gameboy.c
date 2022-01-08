@@ -108,7 +108,7 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
         if (gb->rom[CART_TYPE] == CART_ROM_ONLY) {
             return gb->rom[address];
-        } if (gb->rom[CART_TYPE] == CART_MBC1) {
+        } else if (gb->rom[CART_TYPE] == CART_MBC1) {
             uint8 bankIndex = (gb->mbc1.ramBankIndex << 5) | gb->mbc1.romBankIndex;
             bankIndex = bankIndex % gb->mbc1.romBankCount;
             return gb->rom[bankIndex * 0x4000 + address - ROM_SWITCHABLE_BANK_START];
@@ -162,6 +162,8 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
         gb->vram[address - VRAM_START] = value;
     } else if (address >= ROM_SWITCHABLE_BANK_START) {
         gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 1+)\n", address);
+    } else {
+        gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 0)\n", address);
 
         if (gb->rom[CART_TYPE] == CART_MBC1) {
             if (address >= 0x6000) {
@@ -177,8 +179,6 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
                 gb->mbc1.ramEnable = (value & 0x0F) == 0x0A;
             }
         }
-    } else {
-        gbprintf(gb, "Attempt to write to ROM at 0x%04X (bank 0)\n", address);
     }
 }
 
