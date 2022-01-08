@@ -136,7 +136,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         initializeGameboy(gb);
         
         if (input->argc != 2) {
-            fprintf(stderr, "Usage : ./gameboy-emulator <rom>");
+            fprintf(stderr, "Usage : ./gameboy-emulator <rom>\n");
             exit(1);
         }
         
@@ -242,11 +242,16 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
 
         if (event->type == EVENT_KEY) {
             if (event->key.pressFlag == PRESS) {
-                if (event->key.index == KID_F5) {
+                switch (event->key.index) {
+                case KID_F5:
                     platform.resetProgramMemory(memory);
                     return false;
-                } else if (event->key.index == KID_SPACE) {
+                case KID_SPACE:
                     state->paused = !state->paused;
+                    break;
+                case KID_T:
+                    gb->tracing = gb->tracing ? 0 : ~0;
+                    break;
                 }
             }
 
@@ -263,7 +268,7 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     }
 
     drawScreen(gb);
-    triggerInterrupt(gb, INT_VBLANK);
+    /* triggerInterrupt(gb, INT_VBLANK); */
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);

@@ -1376,6 +1376,7 @@ uint8 executeInstruction(GameBoy* gb) {
 
     if (gb->tracing) {
         printGameboyLogLine(stdout, gb);
+        printf("%04x ", prevPC);
         
         handler->disassemble(stdout, instr);
         printf("\n");
