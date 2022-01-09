@@ -919,7 +919,7 @@ INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
         jumpImm16(gb, opcode);
         gb->variableCycles = 16;
     } else {
-        readImm16(gb); // discard jump address
+        REG(PC) += 2; // discard jump address
         gb->variableCycles = 12;
     }
 }
@@ -938,7 +938,7 @@ INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
 
         gb->variableCycles = 12;
     } else {
-        readImmSigned(gb); // discard jump address
+        REG(PC) += 1; // discard jump address
         gb->variableCycles = 8;
     }
 }
@@ -962,7 +962,7 @@ INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
         callImm16(gb, opcode);
         gb->variableCycles = 24;
     } else {
-        readImm16(gb); // discard call address
+        REG(PC) += 2; // discard jump address
         gb->variableCycles = 12;
     }
 }
@@ -1065,10 +1065,9 @@ INSTRUCTION_EXECUTE_FN(prefixCB) {
 #include "disassembly.c"
 
 #define VARIABLE_CYCLES 0xFFFF
-#define INSTR(length, cycles, handler) {length, cycles, handler, handler##_disassemble, #handler}
+#define INSTR(cycles, handler) {cycles, handler, handler##_disassemble, #handler}
 
 typedef struct InstructionHandler {
-    uint16 length;
     uint16 cycles;
     InstructionExecuteFn* execute;
     InstructionDisassembleFn* disassemble;
@@ -1078,339 +1077,339 @@ typedef struct InstructionHandler {
 // reference : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html
 static InstructionHandler instructionHandlers[256] = {
     // 00
-    INSTR(1, 4, nop),
-    INSTR(3, 12, loadImm16ToReg),
-    INSTR(1, 8, loadAToAddrBC),
-    INSTR(1, 8, incReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, rotateALeft),
+    INSTR(4, nop),
+    INSTR(12, loadImm16ToReg),
+    INSTR(8, loadAToAddrBC),
+    INSTR(8, incReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, rotateALeft),
     
-    INSTR(3, 20, loadSPToAddr16),
-    INSTR(1, 8, addReg16ToHL),
-    INSTR(1, 8, loadAddrBCToA),
-    INSTR(1, 8, decReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, rotateARight),
+    INSTR(20, loadSPToAddr16),
+    INSTR(8, addReg16ToHL),
+    INSTR(8, loadAddrBCToA),
+    INSTR(8, decReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, rotateARight),
 
     // 10
-    INSTR(2, 4, stop),
-    INSTR(3, 12, loadImm16ToReg),
-    INSTR(1, 8, loadAToAddrDE),
-    INSTR(1, 8, incReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, rotateALeftThroughCarry),
+    INSTR(4, stop),
+    INSTR(12, loadImm16ToReg),
+    INSTR(8, loadAToAddrDE),
+    INSTR(8, incReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, rotateALeftThroughCarry),
     
-    INSTR(2, 12, relativeJump),
-    INSTR(1, 8, addReg16ToHL),
-    INSTR(1, 8, loadAddrDEToA),
-    INSTR(1, 8, decReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, rotateARightThroughCarry),
+    INSTR(12, relativeJump),
+    INSTR(8, addReg16ToHL),
+    INSTR(8, loadAddrDEToA),
+    INSTR(8, decReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, rotateARightThroughCarry),
 
     // 20
-    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
-    INSTR(3, 12, loadImm16ToReg),
-    INSTR(1, 8, loadAndIncrementAToAddrHL),
-    INSTR(1, 8, incReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, decimalAdjust),
+    INSTR(VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(12, loadImm16ToReg),
+    INSTR(8, loadAndIncrementAToAddrHL),
+    INSTR(8, incReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, decimalAdjust),
     
-    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
-    INSTR(1, 8, addReg16ToHL),
-    INSTR(1, 8, loadAndIncrementAddrHLToA),
-    INSTR(1, 8, decReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, complement),
+    INSTR(VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(8, addReg16ToHL),
+    INSTR(8, loadAndIncrementAddrHLToA),
+    INSTR(8, decReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, complement),
 
     // 30
-    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
-    INSTR(3, 12, loadImm16ToReg),
-    INSTR(1, 8, loadAndDecrementAToAddrHL),
-    INSTR(1, 8, incReg16),
-    INSTR(1, 12, incAddrHL),
-    INSTR(1, 12, decAddrHL),
-    INSTR(2, 12, loadImm8ToAddrHL),
-    INSTR(1, 4, setCarry),
+    INSTR(VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(12, loadImm16ToReg),
+    INSTR(8, loadAndDecrementAToAddrHL),
+    INSTR(8, incReg16),
+    INSTR(12, incAddrHL),
+    INSTR(12, decAddrHL),
+    INSTR(12, loadImm8ToAddrHL),
+    INSTR(4, setCarry),
     
-    INSTR(2, VARIABLE_CYCLES, conditionalRelativeJump),
-    INSTR(1, 8, addReg16ToHL),
-    INSTR(1, 8, loadAndDecrementAddrHLToA),
-    INSTR(1, 8, decReg16),
-    INSTR(1, 4, incReg),
-    INSTR(1, 4, decReg),
-    INSTR(2, 8, loadImm8ToReg),
-    INSTR(1, 4, flipCarry),
+    INSTR(VARIABLE_CYCLES, conditionalRelativeJump),
+    INSTR(8, addReg16ToHL),
+    INSTR(8, loadAndDecrementAddrHLToA),
+    INSTR(8, decReg16),
+    INSTR(4, incReg),
+    INSTR(4, decReg),
+    INSTR(8, loadImm8ToReg),
+    INSTR(4, flipCarry),
 
     // 40
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
     // 50
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
     // 60
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
     // 70
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 8, loadRegToAddrHL),
-    INSTR(1, 4, halt),
-    INSTR(1, 8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(8, loadRegToAddrHL),
+    INSTR(4, halt),
+    INSTR(8, loadRegToAddrHL),
 
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 4, loadRegToReg),
-    INSTR(1, 8, loadAddrHLToReg),
-    INSTR(1, 4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(4, loadRegToReg),
+    INSTR(8, loadAddrHLToReg),
+    INSTR(4, loadRegToReg),
 
     // 80
-    INSTR(1, 4, addReg),
-    INSTR(1, 4, addReg),
-    INSTR(1, 4, addReg),
-    INSTR(1, 4, addReg),
-    INSTR(1, 4, addReg),
-    INSTR(1, 4, addReg),
-    INSTR(1, 8, addAddrHL),
-    INSTR(1, 4, addReg),
+    INSTR(4, addReg),
+    INSTR(4, addReg),
+    INSTR(4, addReg),
+    INSTR(4, addReg),
+    INSTR(4, addReg),
+    INSTR(4, addReg),
+    INSTR(8, addAddrHL),
+    INSTR(4, addReg),
 
-    INSTR(1, 4, adcReg),
-    INSTR(1, 4, adcReg),
-    INSTR(1, 4, adcReg),
-    INSTR(1, 4, adcReg),
-    INSTR(1, 4, adcReg),
-    INSTR(1, 4, adcReg),
-    INSTR(1, 8, adcAddrHL),
-    INSTR(1, 4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(4, adcReg),
+    INSTR(8, adcAddrHL),
+    INSTR(4, adcReg),
 
     // 90
-    INSTR(1, 4, subReg),
-    INSTR(1, 4, subReg),
-    INSTR(1, 4, subReg),
-    INSTR(1, 4, subReg),
-    INSTR(1, 4, subReg),
-    INSTR(1, 4, subReg),
-    INSTR(1, 8, subAddrHL),
-    INSTR(1, 4, subReg),
+    INSTR(4, subReg),
+    INSTR(4, subReg),
+    INSTR(4, subReg),
+    INSTR(4, subReg),
+    INSTR(4, subReg),
+    INSTR(4, subReg),
+    INSTR(8, subAddrHL),
+    INSTR(4, subReg),
 
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 4, sbcReg),
-    INSTR(1, 8, sbcAddrHL),
-    INSTR(1, 4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(4, sbcReg),
+    INSTR(8, sbcAddrHL),
+    INSTR(4, sbcReg),
 
     // A0
-    INSTR(1, 4, andReg),
-    INSTR(1, 4, andReg),
-    INSTR(1, 4, andReg),
-    INSTR(1, 4, andReg),
-    INSTR(1, 4, andReg),
-    INSTR(1, 4, andReg),
-    INSTR(1, 8, andAddrHL),
-    INSTR(1, 4, andReg),
+    INSTR(4, andReg),
+    INSTR(4, andReg),
+    INSTR(4, andReg),
+    INSTR(4, andReg),
+    INSTR(4, andReg),
+    INSTR(4, andReg),
+    INSTR(8, andAddrHL),
+    INSTR(4, andReg),
 
-    INSTR(1, 4, xorReg),
-    INSTR(1, 4, xorReg),
-    INSTR(1, 4, xorReg),
-    INSTR(1, 4, xorReg),
-    INSTR(1, 4, xorReg),
-    INSTR(1, 4, xorReg),
-    INSTR(1, 8, xorAddrHL),
-    INSTR(1, 4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(4, xorReg),
+    INSTR(8, xorAddrHL),
+    INSTR(4, xorReg),
 
     // B0
-    INSTR(1, 4, orReg),
-    INSTR(1, 4, orReg),
-    INSTR(1, 4, orReg),
-    INSTR(1, 4, orReg),
-    INSTR(1, 4, orReg),
-    INSTR(1, 4, orReg),
-    INSTR(1, 8, orAddrHL),
-    INSTR(1, 4, orReg),
+    INSTR(4, orReg),
+    INSTR(4, orReg),
+    INSTR(4, orReg),
+    INSTR(4, orReg),
+    INSTR(4, orReg),
+    INSTR(4, orReg),
+    INSTR(8, orAddrHL),
+    INSTR(4, orReg),
 
-    INSTR(1, 4, compareReg),
-    INSTR(1, 4, compareReg),
-    INSTR(1, 4, compareReg),
-    INSTR(1, 4, compareReg),
-    INSTR(1, 4, compareReg),
-    INSTR(1, 4, compareReg),
-    INSTR(1, 8, compareAddrHL),
-    INSTR(1, 4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(4, compareReg),
+    INSTR(8, compareAddrHL),
+    INSTR(4, compareReg),
 
     // C0
-    INSTR(1, VARIABLE_CYCLES, conditionalRet),
-    INSTR(1, 12, pop),
-    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
-    INSTR(3, 16, jumpImm16),
-    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
-    INSTR(1, 16, push),
-    INSTR(2, 8, addImm8),
-    INSTR(1, 16, reset),
+    INSTR(VARIABLE_CYCLES, conditionalRet),
+    INSTR(12, pop),
+    INSTR(VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(16, jumpImm16),
+    INSTR(VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(16, push),
+    INSTR(8, addImm8),
+    INSTR(16, reset),
     
-    INSTR(1, VARIABLE_CYCLES, conditionalRet),
-    INSTR(1, 16, ret),
-    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
-    INSTR(2, VARIABLE_CYCLES, prefixCB),
-    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
-    INSTR(3, 24, callImm16),
-    INSTR(2, 8, adcImm8),
-    INSTR(1, 16, reset),
+    INSTR(VARIABLE_CYCLES, conditionalRet),
+    INSTR(16, ret),
+    INSTR(VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(VARIABLE_CYCLES, prefixCB),
+    INSTR(VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(24, callImm16),
+    INSTR(8, adcImm8),
+    INSTR(16, reset),
 
     // D0
-    INSTR(1, VARIABLE_CYCLES, conditionalRet),
-    INSTR(1, 12, pop),
-    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(VARIABLE_CYCLES, conditionalRet),
+    INSTR(12, pop),
+    INSTR(VARIABLE_CYCLES, conditionalJumpImm16),
     {},
-    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
-    INSTR(1, 16, push),
-    INSTR(2, 8, subImm8),
-    INSTR(1, 16, reset),
+    INSTR(VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(16, push),
+    INSTR(8, subImm8),
+    INSTR(16, reset),
     
-    INSTR(1, VARIABLE_CYCLES, conditionalRet),
-    INSTR(1, 16, retAndEnableInterrupts),
-    INSTR(3, VARIABLE_CYCLES, conditionalJumpImm16),
+    INSTR(VARIABLE_CYCLES, conditionalRet),
+    INSTR(16, retAndEnableInterrupts),
+    INSTR(VARIABLE_CYCLES, conditionalJumpImm16),
     {},
-    INSTR(3, VARIABLE_CYCLES, conditionalCallImm16),
+    INSTR(VARIABLE_CYCLES, conditionalCallImm16),
     {},
-    INSTR(2, 8, sbcImm8),
-    INSTR(1, 16, reset),
+    INSTR(8, sbcImm8),
+    INSTR(16, reset),
 
     // E0
-    INSTR(2, 12, loadAToIOPortImm8),
-    INSTR(1, 12, pop),
-    INSTR(1, 8, loadAToIOPortC),
+    INSTR(12, loadAToIOPortImm8),
+    INSTR(12, pop),
+    INSTR(8, loadAToIOPortC),
     {},
     {},
-    INSTR(1, 16, push),
-    INSTR(2, 8, andImm8),
-    INSTR(1, 16, reset),
+    INSTR(16, push),
+    INSTR(8, andImm8),
+    INSTR(16, reset),
 
-    INSTR(2, 16, addSignedToSP),
-    INSTR(1, 4, jumpHL),
-    INSTR(3, 16, loadAToAddr16),
+    INSTR(16, addSignedToSP),
+    INSTR(4, jumpHL),
+    INSTR(16, loadAToAddr16),
     {},
     {},
     {},
-    INSTR(2, 8, xorImm8),
-    INSTR(1, 16, reset),
+    INSTR(8, xorImm8),
+    INSTR(16, reset),
 
     // F0
-    INSTR(2, 12, loadIOPortImm8ToA),
-    INSTR(1, 12, pop),
-    INSTR(1, 8, loadIOPortCToA),
-    INSTR(1, 4, disableInterrupts),
+    INSTR(12, loadIOPortImm8ToA),
+    INSTR(12, pop),
+    INSTR(8, loadIOPortCToA),
+    INSTR(4, disableInterrupts),
     {},
-    INSTR(1, 16, push),
-    INSTR(2, 8, orImm8),
-    INSTR(1, 16, reset),
+    INSTR(16, push),
+    INSTR(8, orImm8),
+    INSTR(16, reset),
 
-    INSTR(2, 12, loadSignedPlusSPToHL),
-    INSTR(1, 8, loadHLToSP),
-    INSTR(3, 16, loadAddr16ToA),
-    INSTR(1, 4, enableInterrupts),
+    INSTR(12, loadSignedPlusSPToHL),
+    INSTR(8, loadHLToSP),
+    INSTR(16, loadAddr16ToA),
+    INSTR(4, enableInterrupts),
     {},
     {},
-    INSTR(2, 8, compareImm8),
-    INSTR(1, 16, reset),
+    INSTR(8, compareImm8),
+    INSTR(16, reset),
 };
 
 uint8 executeInstruction(GameBoy* gb) {
     uint16 prevPC = REG(PC);
+    uint8 instr[4];
+    for (uint8 i = 0; i < 4; i++) {
+        instr[i] = RD(prevPC + i);
+    }
+    
+    
+    uint8 opcode = readImm8(gb);
+    InstructionHandler* handler = &instructionHandlers[opcode];
 
+    if (!handler->execute) {
+        fprintf(stderr, "Invalid opcode %X at 0x%04X\n", opcode, prevPC);
+        exit(1);
+    }
+    
     if (gb->tracing) {
         printGameboyLogLine(stdout, gb);
         printf("%04x ", prevPC);
 
-        uint8 instr[4];
-        for (uint8 i = 0; i < 4; i++) {
-            instr[i] = RD(prevPC + i);
-        }
-    
         handler->disassemble(stdout, instr);
         printf("\n");
 
         gb->tracing--;
     }
 
-    uint8 opcode = readImm8(gb);
-    InstructionHandler* handler = &instructionHandlers[opcode];
-
-    if (!handler->execute) {
-        fprintf(stderr, "Invalid opcode %X at 0x%04X\n", opcode, REG(PC));
-        exit(1);
-    }
-
     gb->variableCycles = 0;
-    
     handler->execute(gb, opcode);
+
     uint8 duration;
     if (handler->cycles != VARIABLE_CYCLES) {
         ASSERT(!gb->variableCycles);
@@ -1445,7 +1444,7 @@ void handleInterrupt(GameBoy* gb) {
 
     // find highest-priority, enabled interrupt that was triggered
     for (uint8 interruptIndex = 0;
-         interruptIndex < ARRAY_COUNT(interruptAddresses);
+         interruptIndex < INT_COUNT;
          interruptIndex++) {
         if (getBit(enabledPendingInterrupts, interruptIndex)) {
             gb->callStackHeight++;
@@ -1462,7 +1461,8 @@ void handleInterrupt(GameBoy* gb) {
             uint16 prevPC = REG(PC);
 
             // jump to interrupt handler
-            REG(PC) = interruptAddresses[interruptIndex];
+            uint16 interruptAddress = 0x0040 + 0x08 * interruptIndex;
+            REG(PC) = interruptAddress;
 
             gbprintf(gb, "interrupt %04X -> %04X\n", prevPC, REG(PC));
             break;
@@ -1472,6 +1472,7 @@ void handleInterrupt(GameBoy* gb) {
 
 static void stepClock(GameBoy* gb, uint8 duration) {
     gb->clock += duration;
+    IO(DIV) = gb->clock / 16384;
     
     uint8 tac = IO(TAC);
     if (getBit(tac, 2)) {
@@ -1519,7 +1520,6 @@ void executeCycle(GameBoy* gb) {
     }
 
     stepClock(gb, duration);
-    IO(DIV) = gb->clock / 16384;
     
     handleInterrupt(gb);
 }

@@ -186,6 +186,7 @@ enum Interrupt {
     INT_TIMER,
     INT_SERIAL,
     INT_JOYPAD,
+    INT_COUNT,
 };
 
 enum Conditional {
