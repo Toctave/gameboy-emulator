@@ -10,7 +10,7 @@
 #define RD(address) readMemory(gb, address)
 
 #define INSTRUCTION_EXECUTE_FN_NOSTATIC(name) \
-    void name(GameBoy* gb, uint8* instr)
+    void name(GameBoy* gb, uint8 opcode)
 #define INSTRUCTION_EXECUTE_FN(name) static INSTRUCTION_EXECUTE_FN_NOSTATIC(name)
 
 #define NOT_IMPLEMENTED() { gbError(gb, "Function '%s' not implemented.", __FUNCTION__); }
@@ -71,15 +71,24 @@ static void writeMemory16(GameBoy* gb, uint16 address, uint16 value) {
     writeMemory(gb, address + 1, value >> 8);
 }
 
-uint16 get16BitArgument(uint8* instr) {
-    return read16Bits(instr + 1);
+static uint8 readImm8(GameBoy* gb) {
+    uint8 result = RD(REG(PC));
+    REG(PC)++;
+
+    return result;
 }
 
-int8 getSigned8BitArgument(uint8* instr) {
+static uint16 readImm16(GameBoy* gb) {
+    uint8 lsb = readImm8(gb);
+    uint8 msb = readImm8(gb);
+    return (msb << 8) | lsb;
+}
+
+static int8 readImmSigned(GameBoy* gb) {
     // TODO(octave) : bulletproof this.  For now, implementation
     // defined but works on x86 (and probably any 2's complement
     // machine?)
-    return (int8) instr[1];
+    return (int8) readImm8(gb);
 }
 
 static void updateZeroFlag(GameBoy* gb, uint8 result) {
@@ -87,32 +96,32 @@ static void updateZeroFlag(GameBoy* gb, uint8 result) {
 }
 
 INSTRUCTION_EXECUTE_FN(loadRegToReg) {
-    enum Register8 src = instr[0] & 0x7;
-    enum Register8 dst = (instr[0] >> 3) & 0x7;
+    enum Register8 src = opcode & 0x7;
+    enum Register8 dst = (opcode >> 3) & 0x7;
 
     setReg8(gb, dst, getReg8(gb, src));
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm8ToReg) {
-    enum Register8 reg = (instr[0] - 6) >> 3;
+    enum Register8 reg = (opcode - 6) >> 3;
 
-    setReg8(gb, reg, instr[1]);
+    setReg8(gb, reg, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddrHLToReg) {
-    enum Register8 dst = (instr[0] >> 3) & 0x7;
+    enum Register8 dst = (opcode >> 3) & 0x7;
     
     setReg8(gb, dst, RD(REG(HL)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadRegToAddrHL) {
-    enum Register8 src = instr[0] & 0x7;
+    enum Register8 src = opcode & 0x7;
     
     WR(REG(HL), getReg8(gb, src));
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm8ToAddrHL) {
-    WR(REG(HL), instr[1]);
+    WR(REG(HL), readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddrBCToA) {
@@ -132,19 +141,19 @@ INSTRUCTION_EXECUTE_FN(loadAToAddrDE) {
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToAddr16) {
-    WR(get16BitArgument(instr), getReg8(gb, REG_A));
+    WR(readImm16(gb), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAddr16ToA) {
-    setReg8(gb, REG_A, RD(get16BitArgument(instr)));
+    setReg8(gb, REG_A, RD(readImm16(gb)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadIOPortImm8ToA) {
-    setReg8(gb, REG_A, RD(0xFF00 + instr[1]));
+    setReg8(gb, REG_A, RD(0xFF00 + readImm8(gb)));
 }
 
 INSTRUCTION_EXECUTE_FN(loadAToIOPortImm8) {
-    WR(0xFF00 + instr[1], getReg8(gb, REG_A));
+    WR(0xFF00 + readImm8(gb), getReg8(gb, REG_A));
 }
 
 INSTRUCTION_EXECUTE_FN(loadIOPortCToA) {
@@ -176,13 +185,13 @@ INSTRUCTION_EXECUTE_FN(loadAndDecrementAddrHLToA) {
 }
 
 INSTRUCTION_EXECUTE_FN(loadImm16ToReg) {
-    enum Register16 dst = BC_DE_HL_SP[(instr[0] - 1) >> 4];
+    enum Register16 dst = BC_DE_HL_SP[(opcode - 1) >> 4];
 
-    gb->registers[dst] = get16BitArgument(instr);
+    gb->registers[dst] = readImm16(gb);
 }
 
 INSTRUCTION_EXECUTE_FN(loadSPToAddr16) {
-    writeMemory16(gb, get16BitArgument(instr), REG(SP));
+    writeMemory16(gb, readImm16(gb), REG(SP));
 }
 
 INSTRUCTION_EXECUTE_FN(loadHLToSP) {
@@ -202,12 +211,12 @@ static uint16 doPop(GameBoy* gb) {
 }
 
 INSTRUCTION_EXECUTE_FN(push) {
-    enum Register16 src = BC_DE_HL_AF[(instr[0] - 0xC5) >> 4];
+    enum Register16 src = BC_DE_HL_AF[(opcode - 0xC5) >> 4];
     doPush(gb, gb->registers[src]);
 }
 
 INSTRUCTION_EXECUTE_FN(pop) {
-    enum Register16 dst = BC_DE_HL_AF[(instr[0] - 0xC1) >> 4];
+    enum Register16 dst = BC_DE_HL_AF[(opcode - 0xC1) >> 4];
     gb->registers[dst] = doPop(gb);
     
     if (dst == REG_AF) {
@@ -229,13 +238,13 @@ static void doAdd(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(addReg) {
-    enum Register8 rhs = instr[0] - 0x80;
+    enum Register8 rhs = opcode - 0x80;
 
     doAdd(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(addImm8) {
-    doAdd(gb, instr[1]);
+    doAdd(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(addAddrHL) {
@@ -258,12 +267,12 @@ static void doAdc(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(adcReg) {
-    enum Register8 rhs = instr[0] - 0x88;
+    enum Register8 rhs = opcode - 0x88;
     doAdc(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(adcImm8) {
-    doAdc(gb, instr[1]);
+    doAdc(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(adcAddrHL) {
@@ -284,12 +293,12 @@ static void doSub(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(subReg) {
-    enum Register8 rhs = instr[0] - 0x90;
+    enum Register8 rhs = opcode - 0x90;
     doSub(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(subImm8) {
-    doSub(gb, instr[1]);
+    doSub(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(subAddrHL) {
@@ -311,12 +320,12 @@ static void doSbc(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(sbcReg) {
-    enum Register8 rhs = instr[0] - 0x98;
+    enum Register8 rhs = opcode - 0x98;
     doSbc(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(sbcImm8) {
-    doSbc(gb, instr[1]);
+    doSbc(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(sbcAddrHL) {
@@ -336,12 +345,12 @@ static void doAnd(GameBoy* gb, uint8 rhs) {
     
 
 INSTRUCTION_EXECUTE_FN(andReg) {
-    enum Register8 rhs = instr[0] - 0xA0;
+    enum Register8 rhs = opcode - 0xA0;
     doAnd(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(andImm8) {
-    doAnd(gb, instr[1]);
+    doAnd(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(andAddrHL) {
@@ -360,12 +369,12 @@ static void doXor(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(xorReg) {
-    enum Register8 rhs = instr[0] - 0xA8;
+    enum Register8 rhs = opcode - 0xA8;
     doXor(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(xorImm8) {
-    doXor(gb, instr[1]);
+    doXor(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(xorAddrHL) {
@@ -384,12 +393,12 @@ static void doOr(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(orReg) {
-    enum Register8 rhs = instr[0] - 0xB0;
+    enum Register8 rhs = opcode - 0xB0;
     doOr(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(orImm8) {
-    doOr(gb, instr[1]);
+    doOr(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(orAddrHL) {
@@ -407,13 +416,13 @@ void doCompare(GameBoy* gb, uint8 rhs) {
 }
 
 INSTRUCTION_EXECUTE_FN(compareReg) {
-    enum Register8 rhs = instr[0] - 0xB8;
+    enum Register8 rhs = opcode - 0xB8;
 
     doCompare(gb, getReg8(gb, rhs));
 }
 
 INSTRUCTION_EXECUTE_FN(compareImm8) {
-    doCompare(gb, instr[1]);
+    doCompare(gb, readImm8(gb));
 }
 
 INSTRUCTION_EXECUTE_FN(compareAddrHL) {
@@ -422,7 +431,7 @@ INSTRUCTION_EXECUTE_FN(compareAddrHL) {
 
 
 INSTRUCTION_EXECUTE_FN(incReg) {
-    enum Register8 reg = (instr[0] - 0x04) >> 3;
+    enum Register8 reg = (opcode - 0x04) >> 3;
 
     uint8 lhs = getReg8(gb, reg);
     uint8 result = lhs + 1;
@@ -443,7 +452,7 @@ INSTRUCTION_EXECUTE_FN(incAddrHL) {
 }
 
 INSTRUCTION_EXECUTE_FN(decReg) {
-    enum Register8 reg = (instr[0] - 0x05) >> 3;
+    enum Register8 reg = (opcode - 0x05) >> 3;
 
     uint8 lhs = getReg8(gb, reg);
     uint8 result = lhs - 1;
@@ -506,7 +515,7 @@ INSTRUCTION_EXECUTE_FN(complement) {
 
 
 INSTRUCTION_EXECUTE_FN(addReg16ToHL) {
-    enum Register16 reg = BC_DE_HL_SP[(instr[0] - 0x09) >> 4];
+    enum Register16 reg = BC_DE_HL_SP[(opcode - 0x09) >> 4];
 
     uint16 lhs = REG(HL);
     uint16 rhs = gb->registers[reg];
@@ -520,20 +529,20 @@ INSTRUCTION_EXECUTE_FN(addReg16ToHL) {
 }
 
 INSTRUCTION_EXECUTE_FN(incReg16) {
-    enum Register16 reg = BC_DE_HL_SP[(instr[0] - 0x03) >> 4];
+    enum Register16 reg = BC_DE_HL_SP[(opcode - 0x03) >> 4];
 
     gb->registers[reg]++;
 }
 
 INSTRUCTION_EXECUTE_FN(decReg16) {
-    enum Register16 reg = BC_DE_HL_SP[(instr[0] - 0x08) >> 4];
+    enum Register16 reg = BC_DE_HL_SP[(opcode - 0x08) >> 4];
     
     gb->registers[reg]--;
 }
 
 INSTRUCTION_EXECUTE_FN(addSignedToSP) {
     uint16 lhs = REG(SP);
-    int16 rhs = getSigned8BitArgument(instr);
+    int16 rhs = readImmSigned(gb);
     uint32 result32 = lhs + rhs;
 
     REG(SP) = result32 & 0xFFFF;
@@ -546,7 +555,7 @@ INSTRUCTION_EXECUTE_FN(addSignedToSP) {
 
 INSTRUCTION_EXECUTE_FN(loadSignedPlusSPToHL) {
     uint16 lhs = REG(SP);
-    int16 rhs = getSigned8BitArgument(instr);
+    int16 rhs = readImmSigned(gb);
     uint32 result32 = lhs + rhs;
 
     REG(HL) = result32 & 0xFFFF;
@@ -636,7 +645,7 @@ static uint8 doRotateLeft(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeft) {
-    enum Register8 reg = instr[0];
+    enum Register8 reg = opcode;
 
     setReg8(gb, reg, doRotateLeft(gb, getReg8(gb, reg)));
 }
@@ -656,7 +665,7 @@ static uint8 doRotateLeftThroughCarry(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegLeftThroughCarry) {
-    enum Register8 reg = instr[0] - 0x10;
+    enum Register8 reg = opcode - 0x10;
 
     setReg8(gb, reg, doRotateLeftThroughCarry(gb, getReg8(gb, reg)));
 }
@@ -677,7 +686,7 @@ static uint8 doRotateRight(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRight) {
-    enum Register8 reg = instr[0] - 0x08;
+    enum Register8 reg = opcode - 0x08;
 
     setReg8(gb, reg, doRotateRight(gb, getReg8(gb, reg)));
 }
@@ -697,7 +706,7 @@ static uint8 doRotateRightThroughCarry(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(rotateRegRightThroughCarry) {
-    enum Register8 reg = instr[0] - 0x18;
+    enum Register8 reg = opcode - 0x18;
 
     setReg8(gb, reg, doRotateRightThroughCarry(gb, getReg8(gb, reg)));
 }
@@ -718,7 +727,7 @@ static uint8 doShiftLeftArithmetic(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegLeftArithmetic) {
-    enum Register8 reg = instr[0] - 0x20;
+    enum Register8 reg = opcode - 0x20;
 
     setReg8(gb, reg, doShiftLeftArithmetic(gb, getReg8(gb, reg)));
 }
@@ -739,7 +748,7 @@ static uint8 doShiftRightArithmetic(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightArithmetic) {
-    enum Register8 reg = instr[0] - 0x28;
+    enum Register8 reg = opcode - 0x28;
 
     setReg8(gb, reg, doShiftRightArithmetic(gb, getReg8(gb, reg)));
 }
@@ -760,7 +769,7 @@ uint8 doSwapNibbles(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(swapNibblesReg) {
-    enum Register8 reg = instr[0] - 0x30;
+    enum Register8 reg = opcode - 0x30;
 
     setReg8(gb, reg, doSwapNibbles(gb, getReg8(gb, reg)));
 }
@@ -782,7 +791,7 @@ uint8 doShiftRightLogical(GameBoy* gb, uint8 value) {
 }
 
 INSTRUCTION_EXECUTE_FN(shiftRegRightLogical) {
-    enum Register8 reg = instr[0] - 0x38;
+    enum Register8 reg = opcode - 0x38;
 
     setReg8(gb, reg, doShiftRightLogical(gb, getReg8(gb, reg)));
 }
@@ -801,41 +810,41 @@ static void doTestBit(GameBoy* gb, uint8 byte, uint8 bitIndex) {
 }
 
 INSTRUCTION_EXECUTE_FN(testBitReg) {
-    enum Register8 reg = instr[0] % 8;
+    enum Register8 reg = opcode % 8;
 
-    uint8 bitIndex = (instr[0] - 0x40) >> 3;
+    uint8 bitIndex = (opcode - 0x40) >> 3;
     doTestBit(gb, getReg8(gb, reg), bitIndex);
 }
 
 INSTRUCTION_EXECUTE_FN(testBitAddrHL) {
-    uint8 bitIndex = (instr[0] - 0x40) >> 3;
+    uint8 bitIndex = (opcode - 0x40) >> 3;
     doTestBit(gb, RD(REG(HL)), bitIndex);
 }
 
 INSTRUCTION_EXECUTE_FN(setBitReg) {
-    enum Register8 reg = instr[0] % 8;
-    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    enum Register8 reg = opcode % 8;
+    uint8 bitIndex = (opcode - 0xC0) >> 3;
     uint8 regVal = getReg8(gb, reg);
 
     setReg8(gb, reg, setBit(regVal, bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(setBitAddrHL) {
-    uint8 bitIndex = (instr[0] - 0xC0) >> 3;
+    uint8 bitIndex = (opcode - 0xC0) >> 3;
 
     WR(REG(HL), setBit(RD(REG(HL)), bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitReg) {
-    enum Register8 reg = instr[0] % 8;
-    uint8 bitIndex = (instr[0] - 0x80) >> 3;
+    enum Register8 reg = opcode % 8;
+    uint8 bitIndex = (opcode - 0x80) >> 3;
     uint8 regVal = getReg8(gb, reg);
 
     setReg8(gb, reg, resetBit(regVal, bitIndex));
 }
 
 INSTRUCTION_EXECUTE_FN(resetBitAddrHL) {
-    uint8 bitIndex = (instr[0] - 0x80) >> 3;
+    uint8 bitIndex = (opcode - 0x80) >> 3;
 
     WR(REG(HL), resetBit(RD(REG(HL)), bitIndex));
 }
@@ -877,7 +886,7 @@ INSTRUCTION_EXECUTE_FN(enableInterrupts) {
 
 INSTRUCTION_EXECUTE_FN(jumpImm16) {
     uint16 prevPC = REG(PC);
-    REG(PC) = get16BitArgument(instr);
+    REG(PC) = readImm16(gb);
     gbprintf(gb, "jump %04X -> %04X\n", prevPC, REG(PC));
 }
 
@@ -904,30 +913,32 @@ bool32 checkCondition(GameBoy* gb, enum Conditional cond) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalJumpImm16) {
-    enum Conditional cond = (instr[0] - 0xC2) >> 3;
+    enum Conditional cond = (opcode - 0xC2) >> 3;
 
     if (checkCondition(gb, cond)) {
-        jumpImm16(gb, instr);
+        jumpImm16(gb, opcode);
         gb->variableCycles = 16;
     } else {
+        readImm16(gb); // discard jump address
         gb->variableCycles = 12;
     }
 }
 
 INSTRUCTION_EXECUTE_FN(relativeJump) {
     uint16 prevPC = REG(PC);
-    REG(PC) += getSigned8BitArgument(instr);
+    REG(PC) += readImmSigned(gb);
     /* gbprintf(gb, "relative jump %04X -> %04X\n", prevPC, REG(PC)); */
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
-    enum Conditional cond = (instr[0] - 0x20) >> 3;
+    enum Conditional cond = (opcode - 0x20) >> 3;
 
     if (checkCondition(gb, cond)) {
-        relativeJump(gb, instr);
+        relativeJump(gb, opcode);
 
         gb->variableCycles = 12;
     } else {
+        readImmSigned(gb); // discard jump address
         gb->variableCycles = 8;
     }
 }
@@ -935,8 +946,9 @@ INSTRUCTION_EXECUTE_FN(conditionalRelativeJump) {
 INSTRUCTION_EXECUTE_FN(callImm16) {
     uint16 prevPC = REG(PC);
 
+    uint16 callAddress = readImm16(gb);
     doPush(gb, REG(PC));
-    REG(PC) = get16BitArgument(instr);
+    REG(PC) = callAddress;
 
     gb->callStackHeight++;
 
@@ -944,12 +956,13 @@ INSTRUCTION_EXECUTE_FN(callImm16) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalCallImm16) {
-    enum Conditional cond = (instr[0] - 0xC4) >> 3;
+    enum Conditional cond = (opcode - 0xC4) >> 3;
 
     if (checkCondition(gb, cond)) {
-        callImm16(gb, instr);
+        callImm16(gb, opcode);
         gb->variableCycles = 24;
     } else {
+        readImm16(gb); // discard call address
         gb->variableCycles = 12;
     }
 }
@@ -964,10 +977,10 @@ INSTRUCTION_EXECUTE_FN(ret) {
 }
 
 INSTRUCTION_EXECUTE_FN(conditionalRet) {
-    enum Conditional cond = (instr[0] - 0xC0) >> 3;
+    enum Conditional cond = (opcode - 0xC0) >> 3;
 
     if (checkCondition(gb, cond)) {
-        ret(gb, instr);
+        ret(gb, opcode);
         gb->variableCycles = 20;
     } else {
         gb->variableCycles = 8;
@@ -975,12 +988,12 @@ INSTRUCTION_EXECUTE_FN(conditionalRet) {
 }
 
 INSTRUCTION_EXECUTE_FN(retAndEnableInterrupts) {
-    enableInterrupts(gb, instr);
-    ret(gb, instr);
+    enableInterrupts(gb, opcode);
+    ret(gb, opcode);
 }
 
 INSTRUCTION_EXECUTE_FN(reset) {
-    uint16 address = instr[0] - 0xC7;
+    uint16 address = opcode - 0xC7;
     doPush(gb, REG(PC));
 
     uint16 prevPC = REG(PC);
@@ -990,12 +1003,11 @@ INSTRUCTION_EXECUTE_FN(reset) {
 }
 
 INSTRUCTION_EXECUTE_FN(prefixCB) {
-    instr++;
-
-    bool32 isAddrHL = (instr[0] % 8) == 6;
+    opcode = readImm8(gb);
+    bool32 isAddrHL = (opcode % 8) == 6;
 
     if (isAddrHL) {
-        if (instr[0] >= 0x40 && instr[0] < 0x80) {
+        if (opcode >= 0x40 && opcode < 0x80) {
             gb->variableCycles = 12;
         } else {
             gb->variableCycles = 16;
@@ -1026,26 +1038,26 @@ INSTRUCTION_EXECUTE_FN(prefixCB) {
         dispatchTable[7] = shiftRegRightLogical;
     }
     
-    if (instr[0] < 0x40) {
-        uint8 instrIndex = instr[0] >> 3;
-        dispatchTable[instrIndex](gb, instr);
-    } else if (instr[0] < 0x80) { // test bit
+    if (opcode < 0x40) {
+        uint8 instrIndex = opcode >> 3;
+        dispatchTable[instrIndex](gb, opcode);
+    } else if (opcode < 0x80) { // test bit
         if (isAddrHL) {
-            testBitAddrHL(gb, instr);
+            testBitAddrHL(gb, opcode);
         } else {
-            testBitReg(gb, instr);
+            testBitReg(gb, opcode);
         }
-    } else if (instr[0] < 0xC0) { // reset bit
+    } else if (opcode < 0xC0) { // reset bit
         if (isAddrHL) {
-            resetBitAddrHL(gb, instr);
+            resetBitAddrHL(gb, opcode);
         } else {
-            resetBitReg(gb, instr);
+            resetBitReg(gb, opcode);
         }
     } else { // set bit
         if (isAddrHL) {
-            setBitAddrHL(gb, instr);
+            setBitAddrHL(gb, opcode);
         } else {
-            setBitReg(gb, instr);
+            setBitReg(gb, opcode);
         }
     }
 }
@@ -1372,33 +1384,33 @@ static InstructionHandler instructionHandlers[256] = {
 
 uint8 executeInstruction(GameBoy* gb) {
     uint16 prevPC = REG(PC);
-    uint8 instr[4];
-    for (uint8 i = 0; i < 4; i++) {
-        instr[i] = RD(REG(PC) + i);
-    }
-    
-    InstructionHandler* handler = &instructionHandlers[instr[0]];
-
-    if (!handler->execute) {
-        fprintf(stderr, "Invalid opcode %x at 0x%04X\n", instr[0], REG(PC));
-        exit(1);
-    }
 
     if (gb->tracing) {
         printGameboyLogLine(stdout, gb);
         printf("%04x ", prevPC);
-        
+
+        uint8 instr[4];
+        for (uint8 i = 0; i < 4; i++) {
+            instr[i] = RD(prevPC + i);
+        }
+    
         handler->disassemble(stdout, instr);
         printf("\n");
 
         gb->tracing--;
     }
 
-    REG(PC) += handler->length;
+    uint8 opcode = readImm8(gb);
+    InstructionHandler* handler = &instructionHandlers[opcode];
+
+    if (!handler->execute) {
+        fprintf(stderr, "Invalid opcode %X at 0x%04X\n", opcode, REG(PC));
+        exit(1);
+    }
 
     gb->variableCycles = 0;
     
-    handler->execute(gb, instr);
+    handler->execute(gb, opcode);
     uint8 duration;
     if (handler->cycles != VARIABLE_CYCLES) {
         ASSERT(!gb->variableCycles);

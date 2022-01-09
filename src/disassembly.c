@@ -61,6 +61,16 @@ static const char* conditionalName(enum Conditional cond) {
     }
 }
 
+static uint16 get16BitArgument(uint8* instr) {
+    uint8 lsb = instr[1];
+    uint8 msb = instr[2];
+    return (msb << 8) | lsb;
+}
+
+static int8 getSigned8BitArgument(uint8* instr) {
+    return (int8) instr[1];
+}
+
 INSTRUCTION_DISASSEMBLE_FN(loadRegToReg) {
     enum Register8 src = instr[0] & 0x7;
     enum Register8 dst = (instr[0] >> 3) & 0x7;

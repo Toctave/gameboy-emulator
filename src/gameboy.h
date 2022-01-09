@@ -200,10 +200,6 @@ enum CartridgeType {
     CART_MBC1 = 0x01,
 };
 
-uint16 get16BitArgument(uint8* instr);
-int8 getSigned8BitArgument(uint8* instr);
-
-
 bool32 handleKey(GameBoy* gb, KeyIndex index, PressFlag pressFlag);
 uint8 setBit(uint8 value, uint8 index);
 uint8 resetBit(uint8 value, uint8 index);
