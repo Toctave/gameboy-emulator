@@ -253,13 +253,13 @@ uint8 getSpriteColor(GameBoy* gb, uint8 ly, uint8 lx) {
             uint8 pixelColorIndex =
                 (getBit(tileDataHigh, 7 - dx) << 1) | getBit(tileDataLow, 7 - dx);
 
-            if (spriteX < minSpriteX ||
-                (spriteX == minSpriteX && spriteIndex < minSpriteIndex)) {
+            if (pixelColorIndex &&
+                (spriteX < minSpriteX ||
+                 (spriteX == minSpriteX && spriteIndex < minSpriteIndex))) {
                 colorIndex = pixelColorIndex;
                 minSpriteX = spriteX;
                 minSpriteIndex = spriteIndex;
             }
-            return pixelColorIndex;
         }
     }
 
