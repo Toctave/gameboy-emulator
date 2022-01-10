@@ -268,7 +268,6 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         gb->frameReady = false;
     }
 
-    drawScreen(gb);
     triggerInterrupt(gb, INT_VBLANK);
         
     gl.ClearColor(1.0f, 0.0f, 0.0f, 1.0f);

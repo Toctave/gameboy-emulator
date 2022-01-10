@@ -266,28 +266,27 @@ uint8 getSpriteColor(GameBoy* gb, uint8 ly, uint8 lx) {
     return colorIndex;
 }
 
-void drawScreen(GameBoy* gb) {
-    for (uint8 y = 0; y < GAMEBOY_SCREEN_HEIGHT; y++) {
-        // clear FIFOs
-        gb->backgroundFifo.start = 0;
-        gb->backgroundFifo.end = 0;
+void drawScreenRow(GameBoy* gb, uint8 y) {
+    // clear FIFOs
+    gb->backgroundFifo.start = 0;
+    gb->backgroundFifo.end = 0;
         
-        // fetch first 2 tiles
-        fetchBackgroundPixelRow(gb, y, 0);
-        fetchBackgroundPixelRow(gb, y, 8);
+    // fetch first 2 tiles
+    fetchBackgroundPixelRow(gb, y, 0);
+    fetchBackgroundPixelRow(gb, y, 8);
         
-        // skip the first few pixels if scrolled
-        for (uint8 i = 0; i < IO(SCX) % 8; i++) {
-            getNextBackgroundPixel(gb, y, 0);
-        }
+    // skip the first few pixels if scrolled
+    for (uint8 i = 0; i < IO(SCX) % 8; i++) {
+        getNextBackgroundPixel(gb, y, 0);
+    }
 
-        for (uint8 x = 0; x < GAMEBOY_SCREEN_WIDTH; x++) {
-            uint8 sprite = getSpriteColor(gb, y, x);
-            uint8 bg = getNextBackgroundPixel(gb, y, x);
+    for (uint8 x = 0; x < GAMEBOY_SCREEN_WIDTH; x++) {
+        uint8 sprite = getSpriteColor(gb, y, x);
+        uint8 bg = getNextBackgroundPixel(gb, y, x);
             
-            uint8 gray = getGrayLevel(sprite ? sprite : bg);
+        uint8 gray = getGrayLevel(sprite ? sprite : bg);
 
-            gb->screen[y][x] = gray;
-        }
+        gb->screen[y][x] = gray;
     }
 }
+

@@ -83,6 +83,13 @@ uint8 readMemory(GameBoy* gb, uint16 address) {
                 return 0x0F | (reg & 0xF0);
             }
             break;
+        case IO_STAT: {
+            uint8 bit2 = (IO(LY) == IO(LYC));
+
+            uint8 result = (IO(STAT) & 0xF8) | (bit2 << 2) | gb->renderingMode;
+
+            return result;
+        }
         default:
             return reg;
         }
@@ -141,6 +148,9 @@ void writeMemory(GameBoy* gb, uint16 address, uint8 value) {
         case IO_DIV:
             IO(DIV) = 0;
             return;
+        case IO_STAT:
+            IO(STAT) = (value & 0xF8) | (IO(STAT) & 0x7);
+            break;
         default:
             gb->io[address & 0xFF] = value;
         }

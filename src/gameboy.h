@@ -71,6 +71,7 @@ typedef struct GameBoy {
     PixelFIFO backgroundFifo;
     PixelFIFO spriteFifo;
     bool32 frameReady;
+    uint8 renderingMode; // 0 = HBlank, 1 = VBlank, 2 = Searching OAM, 3 = data to LCD
     
     // debugging
     uint16 callStackHeight;
@@ -236,8 +237,7 @@ void printGameboyLogLine(FILE* file, GameBoy* gb);
 
 bool32 loadRom(GameBoy* gb, const char* filename);
 
-void drawBackground(GameBoy* gb);
-void drawScreen(GameBoy* gb);
+void drawScreenRow(GameBoy* gb, uint8 y);
 
 void gbError(GameBoy* gb, const char* message, ...);
 

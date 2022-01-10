@@ -1500,6 +1500,11 @@ static void stepClock(GameBoy* gb, uint8 duration) {
     gb->renderingAccumulator += duration;
     while (gb->renderingAccumulator > GAMEBOY_CYCLES_PER_SCANLINE) {
         IO(LY)++;
+        
+        if (IO(LY) < GAMEBOY_SCREEN_HEIGHT) {
+            drawScreenRow(gb, IO(LY));
+        }
+        
         if (IO(LY) == GAMEBOY_LY_VBLANK) {
             triggerInterrupt(gb, INT_VBLANK);
         } else if (IO(LY) == GAMEBOY_LY_MAX) {
@@ -1507,7 +1512,34 @@ static void stepClock(GameBoy* gb, uint8 duration) {
             gb->frameReady = true;
         }
 
+        if (IO(LY) == IO(LYC) && getBit(IO(STAT), 6)) {
+            triggerInterrupt(gb, INT_LCDC);
+        }
+
         gb->renderingAccumulator -= GAMEBOY_CYCLES_PER_SCANLINE;
+    }
+
+    if (IO(LY) >= GAMEBOY_LY_VBLANK) {
+        if (gb->renderingMode != 1 && getBit(IO(STAT), 4)) {
+            triggerInterrupt(gb, INT_LCDC);
+        }
+        
+        gb->renderingMode = 1; // vblank
+    } else if (gb->renderingAccumulator < 80) {
+        if (gb->renderingMode != 2 && getBit(IO(STAT), 5)) {
+            triggerInterrupt(gb, INT_LCDC);
+        }
+        
+        gb->renderingMode = 2; // oam read
+    } else if (gb->renderingAccumulator < 369) {
+        // TODO(octave) : variable mode 3/0 duration
+        gb->renderingMode = 3; // drawing pixels
+    } else {
+        if (gb->renderingMode != 0 && getBit(IO(STAT), 3)) {
+            triggerInterrupt(gb, INT_LCDC);
+        }
+        
+        gb->renderingMode = 0; // hblank
     }
 }
 
