@@ -235,7 +235,16 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
         gl.UseProgram(state->shader);
         gl.Uniform1i(texLoc, 0);
         gl.UseProgram(state->shader);
-        
+
+        printf(
+            "Emulator started.\n"
+            "Controls:\n"
+            " - D-Pad :  WASD\n"
+            " - A :      I\n"
+            " - B :      J\n"
+            " - Start :  5\n"
+            " - Select : 6\n");
+
         state->isInitialized = true;
     }
 
