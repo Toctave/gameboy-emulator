@@ -574,6 +574,9 @@ int main(int argc, char** argv) {
     InputInfo inputInfo = {};
     inputInfo.argc = argc;
     inputInfo.argv = argv;
+    inputInfo.windowTitle = "Window";
+
+    XStoreName(ctx.dpy, ctx.window, inputInfo.windowTitle);
 
     WM_DELETE_WINDOW = XInternAtom(ctx.dpy, "WM_DELETE_WINDOW", true);
     if (!XSetWMProtocols(ctx.dpy, ctx.window, &WM_DELETE_WINDOW, 1)) {
@@ -675,6 +678,8 @@ int main(int argc, char** argv) {
             break;
         }
         inputInfo.eventCount = 0;
+
+        XStoreName(ctx.dpy, ctx.window, inputInfo.windowTitle);
 
         glXSwapBuffers(ctx.dpy, glxWindow);
 

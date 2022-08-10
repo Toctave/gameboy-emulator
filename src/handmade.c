@@ -131,6 +131,8 @@ UPDATE_PROGRAM_AND_RENDER(updateProgramAndRender) {
     GameBoy* gb = &state->gb;
 
     if (!state->isInitialized) {
+        input->windowTitle = "Gameboy emulator";
+
         // Initialize GB
         state->paused = false;
         initializeGameboy(gb);

@@ -156,6 +156,9 @@ typedef struct InputInfo {
     bool32 didResize;
 
     InputState state;
+
+    /* May be changed by the program */
+    const char* windowTitle;
 } InputInfo;
 
 struct ProgramMemory;
