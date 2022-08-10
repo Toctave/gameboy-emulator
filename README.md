@@ -1,5 +1,7 @@
 # GameBoy emulator
 
+![image](https://user-images.githubusercontent.com/21238398/184012126-0807f8fe-5163-43f8-8280-171ce331cb6d.png)
+
 A GameBoy emulator written from scratch with a [handmade](https://handmadehero.org/)-style approach. 
 
 The emulator is unfinished but works. 
