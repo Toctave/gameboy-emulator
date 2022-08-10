@@ -20,6 +20,18 @@ However, this project was mostly a go at the handmade development philosophy :
 - Optimization mostly through ["non-pessimization"](https://youtu.be/pgoetgxecw8)
 - Hot reloading : recompiling while the program is running allows it to use the new code, as long as the ABI between the (tiny) host executable and the main loop (in a dynamic library) is left unchanged.
 
+## Project structure
+
+```
+gameboy.c        | Gameboy logistics : read/write from memory, get input, load ROMs, etc.
+instructions.c   | Core of the emulator : implementations of the CPU instructions
+disassembly.c    | Z80 disassembly for debugging purposes
+rendering.c      | Bare-bones implementation of the Gameboy PPU
+
+handmade_*.c     | entry point and orchestration of the program : manages input, hot-reloading, display, etc.
+linux_*.c        | linux-specific code
+```
+
 ## Dependencies
 
 Only dependencies are X11 for window management and input on Linux, and OpenGL for display. 
